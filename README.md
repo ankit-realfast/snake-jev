@@ -163,12 +163,35 @@ Answer: `up` 0.99, confidence 0.99.
 As coach, Claude never sees individual moves. After each game it gets the
 current config, the digest and the score history, and returns at most 2 edits.
 
-As a player (`--player claude`, `ClaudePlayer`), Claude gets the same state and
-options as Jev, sent as one message, plus a short system prompt. It returns a
-move from the options (JSON schema enum) and a reason of at most 12 words. There
-are no probabilities, no confidence and no danger score. Each move is measured
-at about 2.5 s and 676 input and 29 output tokens with `claude-sonnet-5` at low
-effort. That is about $0.0016 a move, or about $3 for a 2,000-move game.
+Claude as a player (`--player claude`, `ClaudePlayer`) gets one Messages API
+request per move. This is move 1 with default settings:
+
+```jsonc
+{
+  "model": "claude-sonnet-5",
+  "max_tokens": 4000,
+  "thinking": {"type": "adaptive"},
+  "output_config": {
+    "effort": "low",
+    "format": {"type": "json_schema", "schema": {
+      "type": "object",
+      "properties": {
+        "move": {"type": "string", "enum": ["up", "down", "right"]},
+        "reason": {"type": "string"}
+      },
+      "required": ["move", "reason"],
+      "additionalProperties": false
+    }}
+  },
+  "betas": ["server-side-fallback-2026-07-01"],
+  "fallbacks": "default",
+  "system": "You play snake on a 20x20 board. Each turn you get the board state and a question with the allowed moves. Moves that would kill the snake immediately have already been removed. Pick the one move that best keeps the snake alive and eats food. Answer with the move and a reason of at most 12 words.",
+  "messages": [{"role": "user", "content": "State:\n{\"facts\": {\"head\": [10, 10], \"direction\": \"right\", \"length\": 3, \"score\": 0, \"food\": [5, 8], \"straight_line_distance_to_food\": 7, \"coordinates\": \"x grows to the right, y grows downward; up means y-1\", \"cells_to_wall\": {\"up\": 10, \"down\": 9, \"left\": 10, \"right\": 9}, \"open_space_after_move\": {\"up\": 398, \"down\": 398, \"right\": 398}}, \"board\": \"<20 rows of . H o T F>\", \"legend\": \"H head, o body, T tail, F food, . empty\"}\n\nQuestion: Which direction should the snake move next?\nOptions:\n{\n \"up\": \"move up to cell [10, 9]\",\n \"down\": \"move down to cell [10, 11]\",\n \"right\": \"move right to cell [11, 10]\"\n}"}]
+}
+```
+
+Answer: `{"move": "up", "reason": "Moves toward food, decreasing distance while avoiding walls."}`
+at 675 input and 35 output tokens, 2.2 s.
 
 | | Bot | Jev | Coached Jev | Claude |
 |---|---|---|---|---|
