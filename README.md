@@ -23,11 +23,15 @@ known, and Jev when the call needs judgment.
 
 ## Results (seed 7, no move cap)
 
-| Player | Score | Death |
-|---|---|---|
-| Bot: shortest path, no AI | 800 | trapped |
-| Jev alone, default inputs | 270, 110 | starved |
-| Jev + Claude coach | 110 → **1050** → 930 | trapped |
+| Player | Score | Death | Cost per game |
+|---|---|---|---|
+| Claude alone, default inputs (`claude-sonnet-5`) | **1120** (3,121 moves) | trapped | $4.96 |
+| Jev + Claude coach | 110 → **1050** → 930 | trapped | ~$0.05 per game + one coach call |
+| Bot: shortest path, no AI | 800 | trapped | $0 |
+| Jev alone, default inputs | 110, 270, 390 | starved | ~$0.05 |
+
+Each row is one game per config, so gaps under ~100 points can be noise (see result 4).
+Coach game 1 uses the default inputs, so it also counts as a Jev-alone game.
 
 What the runs showed:
 
@@ -43,6 +47,13 @@ What the runs showed:
 6. The bot is naive. It looks one move ahead, and a tail-reachability check or a
    Hamiltonian cycle would beat coached Jev. Coached Jev beat simple rules,
    not good code.
+7. Claude alone scored the most (1120) without the path hint. Its reasons show
+   it reads direction from coordinates, which uncoached Jev could not. It took
+   about 1.9 s and $0.0016 a move. It cost about 100× coached Jev per game for
+   about 7% more score.
+8. Claude, coached Jev and the bot all died trapped, sliding down a wall into a
+   corner. Better judgment or better inputs delay the trap, but none of them
+   looks ahead. That is the current limit for every player.
 
 ## Run
 
