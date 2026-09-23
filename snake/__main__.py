@@ -34,13 +34,13 @@ KEYS = {curses.KEY_UP: "up", curses.KEY_DOWN: "down", curses.KEY_LEFT: "left", c
 class LiveView:
     """Draws the board and panel after every move of `run`. Returns True to stop."""
 
-    def __init__(self, scr, title: str, delay: float, starve_after):
+    def __init__(self, scr, title: str, starve_after):
         self.screen, self.title, self.starve_after = ui.Screen(scr), title, starve_after
-        self.pacer = ui.Pacer(scr, delay)
+        self.pacer = ui.Pacer(scr)
 
     def draw(self, game, record):
         panel = (ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
-                 + ui.decision_lines(record) + ui.controls_line(self.pacer.paused, self.pacer.delay))
+                 + ui.decision_lines(record) + ui.controls_line(self.pacer.paused))
         self.screen.render(game.size, list(game.body), game.food, panel)
 
     def __call__(self, game, record) -> bool:
@@ -122,12 +122,12 @@ def cmd_run(args):
 
     if args.no_watch or not watch_fits():
         if not args.no_watch:
-            print("terminal too small for the live board (needs 42x26); showing progress only")
+            print("terminal too small for the live board (needs 42x24); showing progress only")
         game = play(progress)
         clear_progress()
     else:
         def watched(scr):
-            view = LiveView(scr, f"{args.player.upper()}  seed {args.seed}", args.delay, args.starve_after)
+            view = LiveView(scr, f"{args.player.upper()}  seed {args.seed}", args.starve_after)
             last = {}
             def on_move(game, record):
                 last["record"] = record
@@ -194,7 +194,7 @@ def cmd_replay(args):
 
     def loop(scr):
         # Logs from before starve_after was recorded all used the 600 default.
-        view = LiveView(scr, f"REPLAY {start['player'].upper()}  seed {start['seed']}", args.delay,
+        view = LiveView(scr, f"REPLAY {start['player'].upper()}  seed {start['seed']}",
                         start.get("starve_after", 600))
         game = Game(seed=start["seed"], starve_after=None)
         record = None
@@ -218,7 +218,7 @@ def main():
     p = argparse.ArgumentParser(prog="snake")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("play"); s.add_argument("--seed", type=int, default=0)
+    s = sub.add_parser("play"); s.add_argument("--seed", type=int, default=7)
     s.add_argument("--tick", type=int, default=120, help="ms per move")
 
     for name in ("run", "coach"):
@@ -231,11 +231,10 @@ def main():
         if name == "run":
             s.add_argument("--digest", action="store_true")
             s.add_argument("--no-watch", action="store_true", help="skip the live board")
-            s.add_argument("--delay", type=float, default=0.03, help="seconds per frame on the live board")
         else:
             s.add_argument("--games", type=int, default=11)
 
-    s = sub.add_parser("replay"); s.add_argument("log"); s.add_argument("--delay", type=float, default=0.03)
+    s = sub.add_parser("replay"); s.add_argument("log")
 
     args = p.parse_args()
     {"play": cmd_play, "run": cmd_run, "coach": cmd_coach, "replay": cmd_replay}[args.cmd](args)

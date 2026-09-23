@@ -60,9 +60,10 @@ uv run python -m snake replay runs/bot/<time>_seed7.jsonl
   `0` turns it off.
 - `--config file.json` starts from saved settings, for example a coach `best_config.json`.
 - `run` and `replay` show a live board with a side panel: score, hunger, steps to
-  food, open space and Jev's probabilities as bars. Keys: `space` pauses, `+`/`-`
-  change the speed, `q` stops. `--delay` sets the starting speed (seconds per
-  move, default 0.03). `--no-watch` gives text only.
+  food, open space and Jev's probabilities as bars. Keys: `space` pauses, `q`
+  stops. `--no-watch` gives text only.
+- `play --tick N` sets how fast the snake moves when you steer (ms per move,
+  default 120).
 
 Set these in `.env`:
 

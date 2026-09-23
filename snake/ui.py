@@ -129,11 +129,9 @@ def decision_lines(record: dict | None) -> list:
     return lines
 
 
-def controls_line(paused: bool, delay: float | None) -> list:
-    speed = f"  {delay:.2f}s/move" if delay is not None else ""
+def controls_line(paused: bool) -> list:
     return [[], [("PAUSED  " if paused else "", "warn"),
-                 ("space", "accent"), (" pause  ", "dim"), ("+/-", "accent"), (" speed  ", "dim"),
-                 ("q", "accent"), (" stop", "dim"), (speed, "dim")]]
+                 ("space", "accent"), (" pause  ", "dim"), ("q", "accent"), (" stop", "dim")]]
 
 
 def game_dict(game) -> dict:
@@ -142,35 +140,27 @@ def game_dict(game) -> dict:
 
 
 class Pacer:
-    """Handles space / + / - / q between frames. Returns True when q is pressed."""
+    """Waits one frame between moves and handles space (pause) and q (stop).
+    Returns True when q is pressed."""
 
-    def __init__(self, scr, delay: float):
-        self.scr, self.delay, self.paused = scr, delay, False
+    FRAME_MS = 30
+
+    def __init__(self, scr):
+        self.scr, self.paused = scr, False
         scr.nodelay(True)
 
     def wait(self, redraw) -> bool:
-        deadline_steps = max(1, int(self.delay / 0.01))
-        for _ in range(deadline_steps):
-            key = self.scr.getch()
+        curses.napms(self.FRAME_MS)
+        while (key := self.scr.getch()) != -1:
             if key == ord("q"):
                 return True
-            if key in (ord("+"), ord("=")):
-                self.delay = max(0.0, self.delay / 1.5 if self.delay > 0.005 else 0.0)
-            elif key in (ord("-"), ord("_")):
-                self.delay = min(2.0, self.delay * 1.5 if self.delay > 0 else 0.02)
-            elif key == ord(" "):
+            if key == ord(" "):
                 self.paused = True
                 redraw()
                 self.scr.nodelay(False)
-                while True:
-                    k = self.scr.getch()
+                while (k := self.scr.getch()) != ord(" "):
                     if k == ord("q"):
                         return True
-                    if k == ord(" "):
-                        break
                 self.scr.nodelay(True)
                 self.paused = False
-            if self.delay == 0:
-                break
-            curses.napms(10)
         return False
