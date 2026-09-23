@@ -58,10 +58,12 @@ def play_game(player, config: PromptConfig, seed: int, log_path: Path,
             record["ate"] = game.moves_since_food == 0 and game.alive
             record["score"] = game.score
             log.write(json.dumps(record) + "\n")
-            if on_move:
-                on_move(game, record)
+            if on_move and on_move(game, record):
+                # The viewer asked to stop (user pressed q).
+                game.death = "stopped"
+                break
 
-        if game.alive:
+        if game.alive and game.death is None:
             game.death = "move_cap"
         log.write(json.dumps({"type": "end", "score": game.score, "moves": game.moves,
                               "food_eaten": game.food_eaten, "death": game.death,

@@ -1,7 +1,7 @@
 """uv run python -m snake <command>
 
   play                      you play, arrow keys / WASD, q to quit
-  run --player bot|jev      one game, logged to runs/
+  run --player bot|jev      one game on a live board, logged to runs/ (--no-watch for text only)
   coach --games 11          Jev plays, Claude edits the prompt, replay same seed
   replay runs/.../x.jsonl   watch a logged game
 """
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import curses
 import json
+import os
 import sys
 import time
 from dataclasses import asdict
@@ -40,8 +41,44 @@ def draw(scr, size, body, food, status):
         row = "".join(cells.get((x, y), "  ") for x in range(size))
         scr.addstr(y + 1, 0, "|" + row + "|")
     scr.addstr(size + 1, 0, "+" + "--" * size + "+")
-    scr.addstr(size + 2, 0, status[: 2 * size + 2])
+    for i, line in enumerate([status] if isinstance(status, str) else status):
+        scr.addstr(size + 2 + i, 0, line[: 2 * size + 2])
     scr.refresh()
+
+
+class LiveView:
+    """Draws the board after every move of `run`. Returns True to stop."""
+
+    def __init__(self, scr, delay: float):
+        self.scr, self.delay = scr, delay
+        curses.curs_set(0)
+        scr.nodelay(True)
+
+    def __call__(self, game, record) -> bool:
+        probs = record.get("probabilities")
+        if probs:
+            ranked = sorted(probs.items(), key=lambda kv: -kv[1])
+            decision = "jev: " + "  ".join(f"{m} {p:.2f}" for m, p in ranked) + f"  conf {record['confidence']:.2f}"
+        elif record.get("forced"):
+            decision = f"no choice ({record['forced'].replace('_', ' ')})"
+        else:
+            decision = "bot rule"
+        draw(self.scr, game.size, list(game.body), game.food, [
+            f"move {record['n']} {record['move']:<5} score {game.score}  len {len(game.body)}",
+            decision,
+            "q stops",
+        ])
+        time.sleep(self.delay)
+        return self.scr.getch() == ord("q")
+
+
+def watch_fits() -> bool:
+    """Board is 22 rows x 42 cols plus 3 status lines."""
+    try:
+        cols, rows = os.get_terminal_size()
+    except OSError:
+        return False
+    return rows >= 26 and cols >= 42
 
 
 def cmd_play(args):
@@ -87,9 +124,25 @@ def clear_progress():
 def cmd_run(args):
     config = PromptConfig(**json.loads(Path(args.config).read_text())) if args.config else PromptConfig()
     out = RUNS / args.player / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}.jsonl"
-    game = play_game(make_player(args.player), config, args.seed, out,
-                     max_moves=args.max_moves, starve_after=args.starve_after, on_move=progress)
-    clear_progress()
+    player = make_player(args.player)
+
+    def play(on_move):
+        return play_game(player, config, args.seed, out,
+                         max_moves=args.max_moves, starve_after=args.starve_after, on_move=on_move)
+
+    if args.no_watch or not watch_fits():
+        if not args.no_watch:
+            print("terminal too small for the live board (needs 42x26); showing progress only")
+        game = play(progress)
+        clear_progress()
+    else:
+        def watched(scr):
+            game = play(LiveView(scr, args.delay))
+            scr.addstr(game.size + 4, 0, f"game over: {game.death}. any key")
+            scr.nodelay(False)
+            scr.getch()
+            return game
+        game = curses.wrapper(watched)
     print(f"score {game.score}, {game.moves} moves, {game.food_eaten} food, death: {game.death}")
     print(f"log: {out}")
     if args.digest:
@@ -184,6 +237,8 @@ def main():
         s.add_argument("--starve-after", type=int, default=600)
         if name == "run":
             s.add_argument("--digest", action="store_true")
+            s.add_argument("--no-watch", action="store_true", help="skip the live board")
+            s.add_argument("--delay", type=float, default=0.03, help="seconds per frame on the live board")
         else:
             s.add_argument("--games", type=int, default=11)
 
