@@ -1,0 +1,159 @@
+{
+  "digest": {
+    "score": 1050,
+    "moves": 2130,
+    "food_eaten": 105,
+    "death": "trapped",
+    "space_trend_last_15": [
+      13,
+      12,
+      11,
+      10,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+      0,
+      0
+    ],
+    "moves_that_lengthened_path_to_food": 40,
+    "longest_stretch_without_food": 184,
+    "trapped_steps": 122,
+    "low_confidence_decisions": 230,
+    "decisions_asked": 1965,
+    "last_moves": [
+      {
+        "n": 2123,
+        "head": [
+          19,
+          7
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 6,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2124,
+        "head": [
+          19,
+          6
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 5,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2125,
+        "head": [
+          19,
+          5
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 4,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2126,
+        "head": [
+          19,
+          4
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 3,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2127,
+        "head": [
+          19,
+          3
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 2,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2128,
+        "head": [
+          19,
+          2
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 1,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2129,
+        "head": [
+          19,
+          1
+        ],
+        "move": "up",
+        "offered": [
+          "up"
+        ],
+        "space_after": 0,
+        "confidence": null,
+        "path_before": null
+      },
+      {
+        "n": 2130,
+        "head": [
+          19,
+          0
+        ],
+        "move": "up",
+        "offered": [],
+        "space_after": 0,
+        "confidence": null,
+        "path_before": null
+      }
+    ]
+  },
+  "proposal": {
+    "diagnosis": "Snake died 'trapped' after a 15-step stretch where space_after monotonically shrank from 13 to 0 while only a single move was ever offered (no alternative escaped the pocket). This shows pocket_ratio=1.0 let the snake commit to a shrinking corridor before it became a no-choice situation - the filter wasn't strict enough to reject that path earlier while alternatives still existed.",
+    "edits": [
+      {
+        "field": "pocket_ratio",
+        "value": "1.6",
+        "observation": "space_trend_last_15 shows a steady monotonic decline (13->0) with 'offered' collapsing to a single move for the last 7 steps, indicating the snake entered a pocket before it was forced with no alternative; a stricter pocket_ratio should reject that path earlier while other roomier options were still available."
+      }
+    ]
+  },
+  "applied": [
+    {
+      "field": "pocket_ratio",
+      "value": "1.6",
+      "observation": "space_trend_last_15 shows a steady monotonic decline (13->0) with 'offered' collapsing to a single move for the last 7 steps, indicating the snake entered a pocket before it was forced with no alternative; a stricter pocket_ratio should reject that path earlier while other roomier options were still available."
+    }
+  ]
+}

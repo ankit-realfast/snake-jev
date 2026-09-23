@@ -1,0 +1,182 @@
+{
+  "digest": {
+    "score": 110,
+    "moves": 1390,
+    "food_eaten": 11,
+    "death": "starved",
+    "space_trend_last_15": [
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387,
+      387
+    ],
+    "moves_that_lengthened_path_to_food": 606,
+    "longest_stretch_without_food": 600,
+    "trapped_steps": 0,
+    "low_confidence_decisions": 570,
+    "decisions_asked": 1389,
+    "last_moves": [
+      {
+        "n": 1383,
+        "head": [
+          11,
+          19
+        ],
+        "move": "right",
+        "offered": [
+          "up",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.14,
+        "path_before": 7
+      },
+      {
+        "n": 1384,
+        "head": [
+          12,
+          19
+        ],
+        "move": "right",
+        "offered": [
+          "up",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.14,
+        "path_before": 6
+      },
+      {
+        "n": 1385,
+        "head": [
+          13,
+          19
+        ],
+        "move": "right",
+        "offered": [
+          "up",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.14,
+        "path_before": 7
+      },
+      {
+        "n": 1386,
+        "head": [
+          14,
+          19
+        ],
+        "move": "right",
+        "offered": [
+          "up",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.1,
+        "path_before": 8
+      },
+      {
+        "n": 1387,
+        "head": [
+          15,
+          19
+        ],
+        "move": "up",
+        "offered": [
+          "up",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.07,
+        "path_before": 9
+      },
+      {
+        "n": 1388,
+        "head": [
+          15,
+          18
+        ],
+        "move": "up",
+        "offered": [
+          "up",
+          "left",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.79,
+        "path_before": 8
+      },
+      {
+        "n": 1389,
+        "head": [
+          15,
+          17
+        ],
+        "move": "up",
+        "offered": [
+          "up",
+          "left",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.7,
+        "path_before": 7
+      },
+      {
+        "n": 1390,
+        "head": [
+          15,
+          16
+        ],
+        "move": "up",
+        "offered": [
+          "up",
+          "left",
+          "right"
+        ],
+        "space_after": 387,
+        "confidence": 0.77,
+        "path_before": 6
+      }
+    ]
+  },
+  "proposal": {
+    "diagnosis": "Snake starved despite plenty of space (387 constant), with 606/1390 moves increasing path distance to food and many low-confidence decisions (570). This indicates Jev lacks real path-awareness (only straight-line distance/grid) and wanders inefficiently instead of heading toward food, wasting moves without dying. Adding path_hint gives true shortest-route info, and using consequences option style would let Jev see distance-to-food per option to reduce indecisive wandering.",
+    "edits": [
+      {
+        "field": "include_path_hint",
+        "value": "true",
+        "observation": "moves_that_lengthened_path_to_food=606 out of 1390, showing frequent movement away from food due to lack of real pathfinding info"
+      },
+      {
+        "field": "option_style",
+        "value": "consequences",
+        "observation": "low_confidence_decisions=570 with plain option style suggests Jev struggles to choose without explicit food-distance/space consequences per option"
+      }
+    ]
+  },
+  "applied": [
+    {
+      "field": "include_path_hint",
+      "value": "true",
+      "observation": "moves_that_lengthened_path_to_food=606 out of 1390, showing frequent movement away from food due to lack of real pathfinding info"
+    },
+    {
+      "field": "option_style",
+      "value": "consequences",
+      "observation": "low_confidence_decisions=570 with plain option style suggests Jev struggles to choose without explicit food-distance/space consequences per option"
+    }
+  ]
+}
