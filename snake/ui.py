@@ -117,6 +117,12 @@ def decision_lines(record: dict | None) -> list:
         if danger is not None:
             label = "safe" if danger < 0.5 else "some risk" if danger < 1.5 else "trapped"
             lines.append([("danger  ", "dim"), (f"{label} ({danger:.2f} of 2)", "warn" if danger >= 0.5 else "plain")])
+    elif record.get("reason") is not None:
+        lines.append([("CLAUDE CHOICE", "title")])
+        lines.append([(f"→ {record['move']}", "pick")])
+        lines.append([(record["reason"], "plain")])
+        if record.get("latency_s") is not None:
+            lines.append([("answered in ", "dim"), (f"{record['latency_s']:.1f}s", "bold")])
     elif record.get("forced"):
         lines.append([("NO CHOICE", "title")])
         lines.append([(record["forced"].replace("_", " ") + f" → {record['move']}", "plain")])

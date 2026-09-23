@@ -1,7 +1,7 @@
 """uv run python -m snake <command>
 
   play                      you play, arrow keys / WASD, q to quit
-  run --player bot|jev      one game on a live board, logged to runs/ (--no-watch for text only)
+  run --player bot|jev|claude  one game on a live board, logged to runs/ (--no-watch for text only)
   coach --games 11          Jev plays, Claude edits the prompt, replay same seed
   replay runs/.../x.jsonl   watch a logged game
 """
@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 from .coach import Coach, apply_edits, digest
 from .engine import OPPOSITE, Game
-from .players import BotPlayer, JevPlayer
+from .players import BotPlayer, ClaudePlayer, JevPlayer
 from .prompt import PromptConfig
 from .runner import play_game
 from . import ui
@@ -95,7 +95,7 @@ def cmd_play(args):
 
 
 def make_player(name):
-    return BotPlayer() if name == "bot" else JevPlayer()
+    return {"bot": BotPlayer, "jev": JevPlayer, "claude": ClaudePlayer}[name]()
 
 
 def progress(game, record):
@@ -223,7 +223,7 @@ def main():
 
     for name in ("run", "coach"):
         s = sub.add_parser(name)
-        s.add_argument("--player", choices=["bot", "jev"], default="jev" if name == "coach" else "bot")
+        s.add_argument("--player", choices=["bot", "jev", "claude"], default="jev" if name == "coach" else "bot")
         s.add_argument("--seed", type=int, default=7)
         s.add_argument("--config", help="PromptConfig JSON file")
         s.add_argument("--max-moves", type=int)

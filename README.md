@@ -50,6 +50,7 @@ What the runs showed:
 uv run python -m snake play                         # you play (arrows/WASD, q quits)
 uv run python -m snake run --player bot --digest    # baseline, free
 uv run python -m snake run --player jev --digest    # Jev alone
+uv run python -m snake run --player claude --digest # Claude alone, same inputs as Jev
 uv run python -m snake coach --games 3              # Jev + Claude, same seed each game
 uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 ```
@@ -72,6 +73,7 @@ TYPESAFE_API_KEY=...
 ANTHROPIC_API_KEY=...
 COACH_MODEL=claude-sonnet-5
 JEV_MODEL=jev-1.13.0
+CLAUDE_PLAYER_MODEL=claude-sonnet-5
 ```
 
 ## How it works
@@ -91,6 +93,93 @@ count. Claude proposes
 at most 2 edits to `PromptConfig`, each tied to an observation. The next game
 plays the best config so far plus those edits. A worse result never becomes the
 new baseline.
+
+### What each player receives
+
+The bot gets no payload. It is code that reads the game and applies its rule:
+shortest path, otherwise the roomiest move (`BotPlayer` in `snake/players.py`):
+
+```python
+path = shortest_path(game)              # BFS around the body: (steps, first_move) or None
+if path and path[1] in offered:         # offered = moves left after the safety filter
+    move = path[1]
+else:
+    move = max(decision.offered, key=lambda m: (m.space, -m.food_distance)).move
+```
+
+Jev gets one request per move. This is move 1 with default settings:
+
+```jsonc
+{
+  "model": "jev-1.13.0",
+  "state": {
+    "facts": {
+      "head": [10, 10], "direction": "right", "length": 3, "score": 0,
+      "food": [5, 8],
+      "straight_line_distance_to_food": 7,
+      "coordinates": "x grows to the right, y grows downward; up means y-1",
+      "cells_to_wall": {"up": 10, "down": 9, "left": 10, "right": 9},
+      "open_space_after_move": {"up": 398, "down": 398, "right": 398}
+    },
+    "board": "<20 rows of . H o T F>",
+    "legend": "H head, o body, T tail, F food, . empty"
+  },
+  "questions": {
+    "move": {
+      "type": "choice",
+      "instructions": "Which direction should the snake move next?",
+      "criteria": {
+        "up": "move up to cell [10, 9]",
+        "down": "move down to cell [10, 11]",
+        "right": "move right to cell [11, 10]"
+      }
+    },
+    "danger": {
+      "type": "score",
+      "instructions": "How close is the snake to trapping itself?",
+      "criteria": ["Safe: plenty of open space around the head",
+                   "Some risk: space is getting tight",
+                   "Trapped or nearly trapped"]
+    }
+  }
+}
+```
+
+Answer: `up` 0.53, confidence 0.29.
+
+Coached Jev gets the same request with the coach's edits applied. In the best
+config (coach game 2) there are two of them:
+
+```jsonc
+"facts": { ..., "shortest_path_to_food": {"steps": 7, "first_step": "up"} },  // include_path_hint
+"criteria": {                                                                 // option_style: consequences
+  "up": "move up to cell [10, 9]; straight-line distance to food becomes 6; 398 open cells reachable afterwards",
+  ...
+}
+```
+
+Answer: `up` 0.99, confidence 0.99.
+
+As coach, Claude never sees individual moves. After each game it gets the
+current config, the digest and the score history, and returns at most 2 edits.
+
+As a player (`--player claude`, `ClaudePlayer`), Claude gets the same state and
+options as Jev, sent as one message, plus a short system prompt. It returns a
+move from the options (JSON schema enum) and a reason of at most 12 words. There
+are no probabilities, no confidence and no danger score. Each move is measured
+at about 2.5 s and 676 input and 29 output tokens with `claude-sonnet-5` at low
+effort. That is about $0.0016 a move, or about $3 for a 2,000-move game.
+
+| | Bot | Jev | Coached Jev | Claude |
+|---|---|---|---|---|
+| API call per move | none | Jev | Jev | Claude |
+| Real path to food | computed and used | not given | given (`first_step`) | not given (default config) |
+| Option descriptions | none | target cell | cell, distance to food, open space | target cell |
+| Danger question | none | asked, not used | asked, not used | not asked |
+| Returns | a move | move, probabilities, confidence | move, probabilities, confidence | move and a reason |
+| Decides the move | fixed rule | Jev | Jev | Claude |
+
+`danger` is logged and shown on the live board. Nothing acts on it yet.
 
 | File | Role |
 |---|---|

@@ -3,9 +3,11 @@ player, owns safety: whatever a player answers is re-checked before use."""
 
 from __future__ import annotations
 
+import json
 import os
 import time
 
+import anthropic
 import httpx
 
 from .analysis import shortest_path
@@ -83,3 +85,56 @@ class JevPlayer:
             "state": state,
             "questions": questions,
         }
+
+
+CLAUDE_SYSTEM = """You play snake on a 20x20 board. Each turn you get the board state and a question with the allowed moves. Moves that would kill the snake immediately have already been removed. Pick the one move that best keeps the snake alive and eats food. Answer with the move and a reason of at most 12 words."""
+
+
+class ClaudePlayer:
+    """Claude picks every move. It gets the same state and options Jev gets,
+    so the only difference between the two players is the model."""
+
+    name = "claude"
+
+    def __init__(self):
+        self.client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        self.model = os.environ["CLAUDE_PLAYER_MODEL"]
+
+    def choose(self, game: Game, config: PromptConfig, decision: Decision) -> dict:
+        state = build_state(game, config, decision)
+        question = build_questions(config, decision)["move"]
+        schema = {
+            "type": "object",
+            "properties": {
+                "move": {"type": "string", "enum": list(question["criteria"])},
+                "reason": {"type": "string"},
+            },
+            "required": ["move", "reason"],
+            "additionalProperties": False,
+        }
+        prompt = (f"State:\n{json.dumps(state)}\n\n"
+                  f"Question: {question['instructions']}\n"
+                  f"Options:\n{json.dumps(question['criteria'], indent=1)}")
+
+        start = time.perf_counter()
+        response = self.client.beta.messages.create(
+            model=self.model,
+            max_tokens=4000,
+            thinking={"type": "adaptive"},
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            system=CLAUDE_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        latency = time.perf_counter() - start
+
+        record = {"latency_s": round(latency, 3), "model": response.model,
+                  "usage": {"input_tokens": response.usage.input_tokens,
+                            "output_tokens": response.usage.output_tokens},
+                  "state": state, "questions": {"move": question}}
+        if response.stop_reason == "refusal":
+            # The rig replaces any answer outside the options with the roomiest move.
+            return {**record, "move": None, "reason": "refused"}
+        answer = json.loads(next(b.text for b in response.content if b.type == "text"))
+        return {**record, "move": answer["move"], "reason": answer["reason"]}
