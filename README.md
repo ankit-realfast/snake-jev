@@ -59,9 +59,10 @@ uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 - `--starve-after N` ends a game after N moves without food. The default is 600;
   `0` turns it off.
 - `--config file.json` starts from saved settings, for example a coach `best_config.json`.
-- `run` shows the game on a live board, with Jev's probabilities and confidence
-  under it. Press `q` to stop, set the speed with `--delay` (seconds per frame,
-  default 0.03), or use `--no-watch` for text only.
+- `run` and `replay` show a live board with a side panel: score, hunger, steps to
+  food, open space and Jev's probabilities as bars. Keys: `space` pauses, `+`/`-`
+  change the speed, `q` stops. `--delay` sets the starting speed (seconds per
+  move, default 0.03). `--no-watch` gives text only.
 
 Set these in `.env`:
 

@@ -24,71 +24,60 @@ from .engine import OPPOSITE, Game
 from .players import BotPlayer, JevPlayer
 from .prompt import PromptConfig
 from .runner import play_game
+from . import ui
 
 RUNS = Path("runs")
 KEYS = {curses.KEY_UP: "up", curses.KEY_DOWN: "down", curses.KEY_LEFT: "left", curses.KEY_RIGHT: "right",
         ord("w"): "up", ord("s"): "down", ord("a"): "left", ord("d"): "right"}
 
 
-def draw(scr, size, body, food, status):
-    scr.erase()
-    scr.addstr(0, 0, "+" + "--" * size + "+")
-    cells = {tuple(c): "()" for c in body[1:]}
-    cells[tuple(body[0])] = "@@"
-    if food:
-        cells[tuple(food)] = "<>"
-    for y in range(size):
-        row = "".join(cells.get((x, y), "  ") for x in range(size))
-        scr.addstr(y + 1, 0, "|" + row + "|")
-    scr.addstr(size + 1, 0, "+" + "--" * size + "+")
-    for i, line in enumerate([status] if isinstance(status, str) else status):
-        scr.addstr(size + 2 + i, 0, line[: 2 * size + 2])
-    scr.refresh()
-
-
 class LiveView:
-    """Draws the board after every move of `run`. Returns True to stop."""
+    """Draws the board and panel after every move of `run`. Returns True to stop."""
 
-    def __init__(self, scr, delay: float):
-        self.scr, self.delay = scr, delay
-        curses.curs_set(0)
-        scr.nodelay(True)
+    def __init__(self, scr, title: str, delay: float, starve_after):
+        self.screen, self.title, self.starve_after = ui.Screen(scr), title, starve_after
+        self.pacer = ui.Pacer(scr, delay)
+
+    def draw(self, game, record):
+        panel = (ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
+                 + ui.decision_lines(record) + ui.controls_line(self.pacer.paused, self.pacer.delay))
+        self.screen.render(game.size, list(game.body), game.food, panel)
 
     def __call__(self, game, record) -> bool:
-        probs = record.get("probabilities")
-        if probs:
-            ranked = sorted(probs.items(), key=lambda kv: -kv[1])
-            decision = "jev: " + "  ".join(f"{m} {p:.2f}" for m, p in ranked) + f"  conf {record['confidence']:.2f}"
-        elif record.get("forced"):
-            decision = f"no choice ({record['forced'].replace('_', ' ')})"
-        else:
-            decision = "bot rule"
-        draw(self.scr, game.size, list(game.body), game.food, [
-            f"move {record['n']} {record['move']:<5} score {game.score}  len {len(game.body)}",
-            decision,
-            "q stops",
-        ])
-        time.sleep(self.delay)
-        return self.scr.getch() == ord("q")
+        self.draw(game, record)
+        return self.pacer.wait(lambda: self.draw(game, record))
+
+    def game_over(self, game, record):
+        panel = (ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
+                 + ui.decision_lines(record)
+                 + [[], [("GAME OVER  ", "warn"), (f"{game.death}", "bold")], [("any key to exit", "dim")]])
+        self.screen.render(game.size, list(game.body), game.food, panel)
+        self.screen.scr.nodelay(False)
+        self.screen.scr.getch()
 
 
 def watch_fits() -> bool:
-    """Board is 22 rows x 42 cols plus 3 status lines."""
+    """Board needs 22 rows x 42 cols; the panel goes beside or under it."""
     try:
         cols, rows = os.get_terminal_size()
     except OSError:
         return False
-    return rows >= 26 and cols >= 42
+    return rows >= 24 and cols >= 42
 
 
 def cmd_play(args):
     def loop(scr):
-        curses.curs_set(0)
+        screen = ui.Screen(scr)
         scr.timeout(args.tick)
         game = Game(seed=args.seed, starve_after=None)
         move = game.direction
+
+        def panel(extra):
+            return ui.stats_lines(f"SNAKE  seed {args.seed}", ui.game_dict(game), None, None) + extra
+
         while game.alive:
-            draw(scr, game.size, list(game.body), game.food, f"score {game.score}  moves {game.moves}  q quits")
+            screen.render(game.size, list(game.body), game.food,
+                          panel([[], [("arrows/WASD", "accent"), (" steer  ", "dim"), ("q", "accent"), (" quit", "dim")]]))
             key = scr.getch()
             if key == ord("q"):
                 return game
@@ -96,7 +85,8 @@ def cmd_play(args):
             if wanted and wanted != OPPOSITE[game.direction]:
                 move = wanted
             game.step(move)
-        draw(scr, game.size, list(game.body), game.food, f"died ({game.death}) score {game.score}. any key")
+        screen.render(game.size, list(game.body), game.food,
+                      panel([[], [("GAME OVER  ", "warn"), (game.death, "bold")], [("any key to exit", "dim")]]))
         scr.timeout(-1)
         scr.getch()
         return game
@@ -137,10 +127,13 @@ def cmd_run(args):
         clear_progress()
     else:
         def watched(scr):
-            game = play(LiveView(scr, args.delay))
-            scr.addstr(game.size + 4, 0, f"game over: {game.death}. any key")
-            scr.nodelay(False)
-            scr.getch()
+            view = LiveView(scr, f"{args.player.upper()}  seed {args.seed}", args.delay, args.starve_after)
+            last = {}
+            def on_move(game, record):
+                last["record"] = record
+                return view(game, record)
+            game = play(on_move)
+            view.game_over(game, last.get("record"))
             return game
         game = curses.wrapper(watched)
     print(f"score {game.score}, {game.moves} moves, {game.food_eaten} food, death: {game.death}")
@@ -197,26 +190,26 @@ def digest_for_best(run_dir, history, best):
 
 def cmd_replay(args):
     lines = [json.loads(l) for l in Path(args.log).read_text().splitlines()]
-    start = lines[0]
+    start, end = lines[0], lines[-1]
 
     def loop(scr):
-        curses.curs_set(0)
+        # Logs from before starve_after was recorded all used the 600 default.
+        view = LiveView(scr, f"REPLAY {start['player'].upper()}  seed {start['seed']}", args.delay,
+                        start.get("starve_after", 600))
         game = Game(seed=start["seed"], starve_after=None)
-        for rec in lines[1:]:
-            if rec["type"] != "move":
+        record = None
+        for record in lines[1:]:
+            if record["type"] != "move":
                 continue
-            game.step(rec["move"])
-            conf = rec.get("confidence")
-            status = f"move {rec['n']} {rec['move']:<5} score {game.score}" + (f" conf {conf:.2f}" if conf else "")
+            game.step(record["move"])
             if not game.alive:
                 # The fatal move is never applied to the body, so the board
-                # stays on the last live position; label the move that killed it.
-                draw(scr, game.size, list(game.body), game.food, status + "  <- fatal")
+                # stays on the last live position.
                 break
-            draw(scr, game.size, list(game.body), game.food, status)
-            time.sleep(args.delay)
-        scr.addstr(game.size + 3, 0, f"end: {lines[-1].get('death')}  score {lines[-1].get('score')}. any key")
-        scr.getch()
+            if view(game, record):
+                break
+        game.death = end.get("death") if end.get("type") == "end" else "log ends"
+        view.game_over(game, record if record and record.get("type") == "move" else None)
     curses.wrapper(loop)
 
 

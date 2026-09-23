@@ -17,7 +17,7 @@ def play_game(player, config: PromptConfig, seed: int, log_path: Path,
     game = Game(seed=seed, starve_after=starve_after)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("w") as log:
-        log.write(json.dumps({"type": "start", "seed": seed, "player": player.name,
+        log.write(json.dumps({"type": "start", "seed": seed, "player": player.name, "starve_after": starve_after,
                               "config": asdict(config), "snapshot": game.snapshot()}) + "\n")
         while game.alive and (max_moves is None or game.moves < max_moves):
             decision = filter_moves(game, config)
