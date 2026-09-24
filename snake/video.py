@@ -151,7 +151,11 @@ def ticks(states, step: int) -> list[int]:
     return list(range(0, longest, step)) + [longest]
 
 
-def write_gif(runs: Path, out: Path, step: int = 4, fps: int = 15, hold_s: float = 3.0) -> dict:
+# step must be odd. A snake can only return to the same cells after an even
+# number of moves, so a loop's length is even. With an even step, a loop whose
+# length divides the step shows the same position in every frame and looks
+# frozen. Laya's 4-move loop did exactly that at step 4.
+def write_gif(runs: Path, out: Path, step: int = 5, fps: int = 15, hold_s: float = 3.0) -> dict:
     states = pick_games(runs)
     r = Renderer(states, cell=13)
     palette = Image.new("P", (1, 1))
