@@ -1,6 +1,7 @@
 """Render the best and worst game from each player folder as one GIF, all in
-one row and grouped by player. A player with a single game gets one board.
-A GIF plays inline in a GitHub README, which an MP4 does not.
+one row and grouped by player, plus an MP4 of the same layout. A player with a
+single game gets one board. The GIF plays inline in a GitHub README; the MP4
+shows every move at 60 fps and a larger scale.
 
 All panels share one clock: a frame at move t shows move t on every board. A
 player whose game has ended freezes on its last position and shows how it died.
@@ -168,3 +169,34 @@ def write_gif(runs: Path, out: Path, step: int = 5, fps: int = 15, hold_s: float
                    duration=[ms] * (len(frames) - 1) + [int(hold_s * 1000)])
     return {"out": out, "seconds": round((len(frames) - 1) * ms / 1000 + hold_s, 1), "size": (r.width, r.height),
             "panels": [(f"{p} {label}", g["path"].name, g["end"]["score"]) for p, label, _, g in states]}
+
+
+def write_mp4(runs: Path, out: Path, step: int = 1, fps: int = 60, hold_s: float = 3.0, cell: int = 20) -> dict:
+    """Same layout as the GIF, but every move at 60 fps and a larger scale, since
+    an MP4 has no palette or file-size limits like a GIF. Frames are piped to
+    the ffmpeg bundled with imageio-ffmpeg, so no system install is needed."""
+    import subprocess
+
+    import imageio_ffmpeg
+
+    states = pick_games(runs)
+    r = Renderer(states, cell=cell)
+    w, h = r.width + r.width % 2, r.height + r.height % 2   # H.264 needs even sizes
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
+           "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "medium",
+           "-movflags", "+faststart", str(out)]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    frames = ticks(states, step)
+    canvas = Image.new("RGB", (w, h), COLORS["bg"])
+    for i, now in enumerate(frames):
+        canvas.paste(r.frame(now), (0, 0))
+        data = canvas.tobytes()
+        for _ in range(int(hold_s * fps) if i == len(frames) - 1 else 1):
+            proc.stdin.write(data)
+    proc.stdin.close()
+    if proc.wait():
+        raise SystemExit(f"ffmpeg failed writing {out}")
+    shown = len(frames) - 1 + int(hold_s * fps)
+    return {"out": out, "seconds": round(shown / fps, 1), "size": (w, h)}

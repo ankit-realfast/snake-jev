@@ -27,7 +27,9 @@ the call needs judgment.
 
 Best and worst game from `runs/rules`, `runs/jev`, `runs/claude` and
 `runs/laya`, in one row grouped by player, on one move clock. A player with one
-game gets a single board. Coach sessions are not included.
+game gets a single board. Coach sessions are not included. `snake video` also
+writes `runs/replays.mp4` locally: the same layout with every move, at 60 fps.
+It is gitignored.
 
 | Player | Score | Death | Cost per game |
 |---|---|---|---|
@@ -120,7 +122,7 @@ uv run python -m snake run --player claude --digest # Claude alone, same inputs 
 uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
 uv run python -m snake replay runs/rules/<time>_seed7_default.jsonl
-uv run python -m snake video                        # best and worst game per player: runs/replays.gif
+uv run python -m snake video                        # best and worst game per player: runs/replays.gif and .mp4
 ```
 
 | Flag | Commands | Effect |
