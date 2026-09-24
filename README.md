@@ -33,7 +33,7 @@ the call needs judgment.
 | Laya alone, default inputs (`multilingual`, local) | 0, 0 (identical games) | starved | $0 |
 | Laya, best coached config | 0 | starved | $0 |
 
-The best coached config is `runs/coach/20260923-163558_seed7/best_config.json`.
+The best coached config is `runs/coach/20260923-163558_seed7_jev/best_config.json`.
 Its first game (1050) is coach game 2. The other two are replays with `--config`.
 Coach game 1 uses the default inputs, so it also counts as a Jev-alone game.
 
@@ -172,7 +172,7 @@ whenever `--config` isn't passed, including every coach session's game 1:
 }
 ```
 
-The best coached config (`runs/coach/20260923-163558_seed7/best_config.json`)
+The best coached config (`runs/coach/20260923-163558_seed7_jev/best_config.json`)
 changes two fields: `"include_path_hint": true` and
 `"option_style": "consequences"`.
 
@@ -352,7 +352,7 @@ in 63 ms. Game results are in results 7–8.
 
 - `runs/bot/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one file per
   game, named `<time>_seed<N>_<config>.jsonl`.
-- `runs/coach/<time>_seed<N>/` holds a session's `game_NN_<config>.jsonl`,
+- `runs/coach/<time>_seed<N>_<player>/` holds a session's `game_NN_<config>.jsonl`,
   `coach_NN.json` (the digest, Claude's proposal and the applied edits) and
   `best_config.json`.
 - `<config>` is `default`, or the changes from the default config joined with
