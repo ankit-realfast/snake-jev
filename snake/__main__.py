@@ -2,7 +2,7 @@
 
   play                      you play, arrow keys / WASD, q to quit
   run --player bot|jev|claude|laya  one game on a live board, logged to runs/ (--no-watch for text only)
-  coach --games 11          Jev plays, Claude edits the prompt, replay same seed
+  coach --games 11          Jev plays on the live board, Claude edits the prompt between games
   replay runs/.../x.jsonl   watch a logged game
 """
 
@@ -27,33 +27,47 @@ from .runner import play_game
 from . import ui
 
 RUNS = Path("runs")
+PLAY_MS_PER_MOVE = 120  # how fast the snake moves when you steer
 KEYS = {curses.KEY_UP: "up", curses.KEY_DOWN: "down", curses.KEY_LEFT: "left", curses.KEY_RIGHT: "right",
         ord("w"): "up", ord("s"): "down", ord("a"): "left", ord("d"): "right"}
 
 
 class LiveView:
-    """Draws the board and panel after every move of `run`. Returns True to stop."""
+    """Draws the board and panel after every move. Returns True to stop."""
 
-    def __init__(self, scr, title: str, starve_after):
+    def __init__(self, scr, title: str, starve_after, subtitle: str | None = None):
         self.screen, self.title, self.starve_after = ui.Screen(scr), title, starve_after
+        self.subtitle = subtitle
         self.pacer = ui.Pacer(scr)
 
+    def stats(self, game, record):
+        lines = ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
+        if self.subtitle:
+            lines.insert(1, [("config ", "dim"), (self.subtitle, "accent")])
+        return lines
+
     def draw(self, game, record):
-        panel = (ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
-                 + ui.decision_lines(record) + ui.controls_line(self.pacer.paused))
+        panel = self.stats(game, record) + ui.decision_lines(record) + ui.controls_line(self.pacer.paused)
         self.screen.render(game.size, list(game.body), game.food, panel)
 
     def __call__(self, game, record) -> bool:
         self.draw(game, record)
         return self.pacer.wait(lambda: self.draw(game, record))
 
-    def game_over(self, game, record):
-        panel = (ui.stats_lines(self.title, ui.game_dict(game), record, self.starve_after)
-                 + ui.decision_lines(record)
-                 + [[], [("GAME OVER  ", "warn"), (f"{game.death}", "bold")], [("any key to exit", "dim")]])
+    def game_over(self, game, record, hold_s: float | None = None):
+        """Show the final board. Waits for a key, or with hold_s moves on by itself."""
+        if hold_s is None:
+            prompt = "any key to exit"
+        else:
+            prompt = "ending the session..." if game.death == "stopped" else "next game starting..."
+        panel = (self.stats(game, record) + ui.decision_lines(record)
+                 + [[], [("GAME OVER  ", "warn"), (f"{game.death}", "bold")], [(prompt, "dim")]])
         self.screen.render(game.size, list(game.body), game.food, panel)
-        self.screen.scr.nodelay(False)
-        self.screen.scr.getch()
+        if hold_s is None:
+            self.screen.scr.nodelay(False)
+            self.screen.scr.getch()
+        else:
+            curses.napms(int(hold_s * 1000))
 
 
 def watch_fits() -> bool:
@@ -68,7 +82,7 @@ def watch_fits() -> bool:
 def cmd_play(args):
     def loop(scr):
         screen = ui.Screen(scr)
-        scr.timeout(args.tick)
+        scr.timeout(PLAY_MS_PER_MOVE)
         game = Game(seed=args.seed, starve_after=None)
         move = game.direction
 
@@ -111,13 +125,10 @@ def clear_progress():
     print("\r\033[K", end="")
 
 
-def cmd_run(args):
-    config = PromptConfig(**json.loads(Path(args.config).read_text())) if args.config else PromptConfig()
-    out = RUNS / args.player / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}_{config.label()}.jsonl"
-    player = make_player(args.player)
-
+def play_one(player, config, seed, log, args, title, subtitle=None, hold_s=None):
+    """Play one game on the live board, or as text with --no-watch."""
     def play(on_move):
-        return play_game(player, config, args.seed, out,
+        return play_game(player, config, seed, log,
                          max_moves=args.max_moves, starve_after=args.starve_after, on_move=on_move)
 
     if args.no_watch or not watch_fits():
@@ -125,17 +136,27 @@ def cmd_run(args):
             print("terminal too small for the live board (needs 42x24); showing progress only")
         game = play(progress)
         clear_progress()
-    else:
-        def watched(scr):
-            view = LiveView(scr, f"{args.player.upper()}  seed {args.seed}", args.starve_after)
-            last = {}
-            def on_move(game, record):
-                last["record"] = record
-                return view(game, record)
-            game = play(on_move)
-            view.game_over(game, last.get("record"))
-            return game
-        game = curses.wrapper(watched)
+        return game
+
+    def watched(scr):
+        view = LiveView(scr, title, args.starve_after, subtitle)
+        last = {}
+
+        def on_move(game, record):
+            last["record"] = record
+            return view(game, record)
+
+        game = play(on_move)
+        view.game_over(game, last.get("record"), hold_s)
+        return game
+    return curses.wrapper(watched)
+
+
+def cmd_run(args):
+    config = PromptConfig(**json.loads(Path(args.config).read_text())) if args.config else PromptConfig()
+    out = RUNS / args.player / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}_{config.label()}.jsonl"
+    game = play_one(make_player(args.player), config, args.seed, out, args,
+                    f"{args.player.upper()}  seed {args.seed}", subtitle=config.label())
     print(f"score {game.score}, {game.moves} moves, {game.food_eaten} food, death: {game.death}")
     print(f"log: {out}")
     if args.digest:
@@ -153,16 +174,19 @@ def cmd_coach(args):
     for i in range(1, args.games + 1):
         print(f"\ngame {i}/{args.games}  seed {args.seed}")
         log = run_dir / f"game_{i:02d}_{config.label()}.jsonl"
-        game = play_game(player, config, args.seed, log,
-                         max_moves=args.max_moves, starve_after=args.starve_after, on_move=progress)
+        game = play_one(player, config, args.seed, log, args,
+                        f"COACH {i}/{args.games}  {args.player.upper()}  seed {args.seed}",
+                        subtitle=config.label(), hold_s=2.0)
         d = digest(log)
-        clear_progress()
         print(f"  score {d['score']}  moves {d['moves']}  death {d['death']}  "
               f"longest drought {d['longest_stretch_without_food']}")
         history.append({"game": i, "score": d["score"], "config": asdict(config), "log": str(log)})
         if d["score"] > best_score:
             best, best_score = config, d["score"]
             (run_dir / "best_config.json").write_text(best.to_json())
+        if game.death == "stopped":
+            print("  stopped with q; ending the session")
+            break
         if i == args.games:
             break
 
@@ -219,7 +243,6 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("play"); s.add_argument("--seed", type=int, default=7)
-    s.add_argument("--tick", type=int, default=120, help="ms per move")
 
     for name in ("run", "coach"):
         s = sub.add_parser(name)
@@ -228,9 +251,9 @@ def main():
         s.add_argument("--config", help="PromptConfig JSON file")
         s.add_argument("--max-moves", type=int)
         s.add_argument("--starve-after", type=int, default=600)
+        s.add_argument("--no-watch", action="store_true", help="skip the live board")
         if name == "run":
             s.add_argument("--digest", action="store_true")
-            s.add_argument("--no-watch", action="store_true", help="skip the live board")
         else:
             s.add_argument("--games", type=int, default=11)
 

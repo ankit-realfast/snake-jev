@@ -98,7 +98,11 @@ ANTHROPIC_API_KEY=...
 JEV_MODEL=jev-1.13.0
 COACH_MODEL=claude-sonnet-5
 CLAUDE_PLAYER_MODEL=claude-sonnet-5
+FRAME_MS=30
 ```
+
+`FRAME_MS` is the pause after each move on the live board, in milliseconds. It
+changes viewing speed only, not the moves. It defaults to 30 when unset.
 
 ## Run
 
@@ -121,13 +125,13 @@ uv run python -m snake replay runs/bot/<time>_seed7_default.jsonl
 | `--starve-after N` | `run`, `coach` | End a game after N moves without food. Default 600; `0` turns it off. |
 | `--games N` | `coach` | Games per session. Default 11. |
 | `--digest` | `run` | Print the death digest at the end. |
-| `--no-watch` | `run` | Text progress only, no live board. |
-| `--tick N` | `play` | Milliseconds per move when you steer. Default 120. |
+| `--no-watch` | `run`, `coach` | Text progress only, no live board. |
 
-`run` and `replay` show a live board with a side panel. The panel has score,
+`run`, `coach` and `replay` show a live board with a side panel. The panel has score,
 hunger, steps to food, open space, and the current decision. For Jev and Laya that is
 their probabilities as bars, and for Claude it is its reason. `space` pauses and `q`
-stops.
+stops. In `coach`, the board closes between games to print Claude's diagnosis
+and edits. The game-over screen moves on after 2 s, and `q` ends the session.
 
 ## How it works
 

@@ -1,0 +1,9 @@
+{
+  "include_grid": true,
+  "include_wall_distances": true,
+  "include_path_hint": false,
+  "include_space": true,
+  "move_instruction": "Which direction should the snake move next?",
+  "option_style": "plain",
+  "pocket_ratio": 1.0
+}

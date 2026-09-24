@@ -4,6 +4,7 @@ side panel with game stats and, for Jev, its probabilities as bars."""
 from __future__ import annotations
 
 import curses
+import os
 
 BOARD_W = 42          # 20 cells x 2 chars + 2 border columns
 PANEL_W = 40
@@ -149,14 +150,14 @@ class Pacer:
     """Waits one frame between moves and handles space (pause) and q (stop).
     Returns True when q is pressed."""
 
-    FRAME_MS = 30
-
     def __init__(self, scr):
         self.scr, self.paused = scr, False
+        # Pause after each move, from .env; 30 ms when unset.
+        self.frame_ms = int(os.environ.get("FRAME_MS", "30"))
         scr.nodelay(True)
 
     def wait(self, redraw) -> bool:
-        curses.napms(self.FRAME_MS)
+        curses.napms(self.frame_ms)
         while (key := self.scr.getch()) != -1:
             if key == ord("q"):
                 return True
