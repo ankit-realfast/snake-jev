@@ -23,6 +23,11 @@ the call needs judgment.
 
 ## Results (seed 7, no move cap)
 
+![Best game per player, side by side](runs/replays.gif)
+
+Best game from `runs/bot`, `runs/jev`, `runs/claude` and `runs/laya`, on one
+move clock. Coach sessions are not included.
+
 | Player | Score | Death | Cost per game |
 |---|---|---|---|
 | Jev, best coached config (3 games) | 1050, 990, **1140** (mean ~1060) | trapped | ~$0.07 |
@@ -114,6 +119,7 @@ uv run python -m snake run --player claude --digest # Claude alone, same inputs 
 uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
 uv run python -m snake replay runs/bot/<time>_seed7_default.jsonl
+uv run python -m snake video                        # runs/replays.gif
 ```
 
 | Flag | Commands | Effect |

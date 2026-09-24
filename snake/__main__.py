@@ -4,6 +4,7 @@
   run --player bot|jev|claude|laya  one game on a live board, logged to runs/ (--no-watch for text only)
   coach --games 11          Jev plays on the live board, Claude edits the prompt between games
   replay runs/.../x.jsonl   watch a logged game
+  video                     best game per player side by side: runs/replays.gif
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from .engine import OPPOSITE, Game
 from .players import BotPlayer, ClaudePlayer, JevPlayer, LayaPlayer
 from .prompt import PromptConfig
 from .runner import play_game
-from . import ui
+from . import ui, video
 
 RUNS = Path("runs")
 PLAY_MS_PER_MOVE = 120  # how fast the snake moves when you steer
@@ -237,6 +238,13 @@ def cmd_replay(args):
     curses.wrapper(loop)
 
 
+def cmd_video(args):
+    gif = video.write_gif(RUNS, RUNS / "replays.gif")
+    for player, log, score in gif["panels"]:
+        print(f"  {player:<7} {score:>5}  {log}")
+    print(f"{gif['out']}  {gif['size'][0]}x{gif['size'][1]}, {gif['seconds']}s")
+
+
 def main():
     load_dotenv()
     p = argparse.ArgumentParser(prog="snake")
@@ -258,9 +266,10 @@ def main():
             s.add_argument("--games", type=int, default=11)
 
     s = sub.add_parser("replay"); s.add_argument("log")
+    sub.add_parser("video")
 
     args = p.parse_args()
-    {"play": cmd_play, "run": cmd_run, "coach": cmd_coach, "replay": cmd_replay}[args.cmd](args)
+    {"play": cmd_play, "run": cmd_run, "coach": cmd_coach, "replay": cmd_replay, "video": cmd_video}[args.cmd](args)
 
 
 if __name__ == "__main__":
