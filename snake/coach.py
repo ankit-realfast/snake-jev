@@ -51,13 +51,21 @@ def digest(log_path: Path) -> dict:
     }
 
 
-COACH_SYSTEM = """You coach a snake-playing decision model called Jev. Jev cannot be retrained; you can only change the inputs it sees, defined by a config.
+# How the coach is told who it is coaching, per --player.
+PLAYERS = {
+    "jev": ("Jev", "TypeSafe's decision model Jev"),
+    "laya": ("Laya", "Laya, an open-source local decision model"),
+    "claude": ("Claude", "Claude, a language model"),
+    "bot": ("the bot", "a fixed-rule bot that ignores the question text; only pocket_ratio changes its play"),
+}
 
-Each move, Jev gets a text state (board and facts, controlled by the config) and one question: which direction to move, with options described according to option_style. Before Jev sees the options, code removes moves that die immediately and, depending on pocket_ratio, moves into confined areas ("pockets", space < pocket_ratio * snake length) when a roomier move exists.
+COACH_SYSTEM = """You coach a snake player: {description}. The player itself stays fixed; you can only change the inputs it sees, defined by a config.
+
+Each move, {name} gets a text state (board and facts, controlled by the config) and one question: which direction to move, with options described according to option_style. Before the player sees the options, code removes moves that die immediately and, depending on pocket_ratio, moves into confined areas ("pockets", space < pocket_ratio * snake length) when a roomier move exists.
 
 Config fields you may edit:
 - include_grid, include_wall_distances, include_path_hint, include_space (bool): which facts go in the state. include_path_hint reports the real shortest route around the body, rather than only straight-line distance.
-- move_instruction (string): the wording of the move question. Jev reads literally; say exactly what you want.
+- move_instruction (string): the wording of the move question. Say exactly what you want; do not rely on implied intent.
 - option_style: "plain" (just the target cell) or "consequences" (adds whether it eats, open space afterwards, distance to food).
 - pocket_ratio (float 0-5): pocket filter strictness. Too strict starves the snake; too loose lets it walk into traps.
 
@@ -87,9 +95,11 @@ EDIT_SCHEMA = {
 
 
 class Coach:
-    def __init__(self):
+    def __init__(self, player: str):
         self.client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
         self.model = os.environ["COACH_MODEL"]
+        name, description = PLAYERS[player]
+        self.system = COACH_SYSTEM.format(name=name, description=description)
 
     def propose(self, current: PromptConfig, game_digest: dict, history: list[dict]) -> dict:
         user = (
@@ -106,7 +116,7 @@ class Coach:
                            "format": {"type": "json_schema", "schema": EDIT_SCHEMA}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            system=COACH_SYSTEM,
+            system=self.system,
             messages=[{"role": "user", "content": user}],
         )
         if response.stop_reason == "refusal":

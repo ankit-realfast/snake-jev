@@ -166,7 +166,7 @@ def cmd_run(args):
 def cmd_coach(args):
     run_dir = RUNS / "coach" / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}_{args.player}"
     run_dir.mkdir(parents=True)
-    player, coach = make_player(args.player), Coach()
+    player, coach = make_player(args.player), Coach(args.player)
     config = PromptConfig(**json.loads(Path(args.config).read_text())) if args.config else PromptConfig()
     best, best_score = config, -1
     history = []
