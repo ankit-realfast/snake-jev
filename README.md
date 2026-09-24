@@ -18,8 +18,8 @@ Snake is useful because every decision can be checked:
 
 The goal is to learn how Jev behaves and whether a coaching loop improves it.
 Then the same loop can be used where no rules exist: ticket urgency, policy
-checks, routing. Rule of thumb: use code when the rules are
-known, and Jev when the call needs judgment.
+checks, routing. Rule of thumb: use code when the rules are known, and Jev when
+the call needs judgment.
 
 ## Results (seed 7, no move cap)
 
@@ -30,85 +30,177 @@ known, and Jev when the call needs judgment.
 | Bot: shortest path, no AI | 800 | trapped | $0 |
 | Jev alone, default inputs | 110, 270, 390 | starved | ~$0.05 |
 
-Each row is one game per config, so gaps under ~100 points can be noise (see result 4).
-Coach game 1 uses the default inputs, so it also counts as a Jev-alone game.
+Each score is one game. Coach game 1 uses the default inputs, so it also counts
+as a Jev-alone game.
 
-What the runs showed:
+### Coaching
 
-1. Jev takes about 0.4 s and about 630 input tokens per decision, roughly $0.05 for a 2,000-move game.
-2. Jev's failures came from missing information, not bad judgment. Turning on
+1. Jev's failures came from missing information, not bad judgment. Turning on
    the shortest-path hint took it from 110 to 1050.
-3. Claude found that fix from the death digest alone. Jev's weights never changed.
+2. Claude found that fix from the death digest alone. Jev's weights never changed.
+
+### Jev's behavior
+
+3. A decision takes about 0.4 s and about 630 input tokens, roughly $0.05 for a
+   2,000-move game.
 4. Jev is not deterministic. The same state and questions give slightly
    different probabilities (±0.05–0.07), and near-ties flip the chosen move.
-   TypeSafe's docs say the same. One game per config is therefore noisy.
-5. Low confidence marked the coin-flip moves. The two seed-7 games split at a
-   move where confidence was 0.0 and 0.1.
-6. The bot is naive. It looks one move ahead, and a tail-reachability check or a
-   Hamiltonian cycle would beat coached Jev. Coached Jev beat simple rules,
-   not good code.
-7. Claude alone scored the most (1120) without the path hint. Its reasons show
+   TypeSafe's docs say the same. Identical settings scored 110, 270 and 390, so
+   gaps under about 100 points between single games can be noise.
+5. Low confidence marks the coin-flip moves. Two identical seed-7 games split at
+   a move where confidence was 0.0 and 0.1.
+
+### Players compared
+
+6. Claude alone scored the most (1120) without the path hint. Its reasons show
    it reads direction from coordinates, which uncoached Jev could not. It took
-   about 1.9 s and $0.0016 a move. It cost about 100× coached Jev per game for
-   about 7% more score.
+   about 1.9 s and $0.0016 a move: about 100× coached Jev's cost for about 7%
+   more score.
+7. The bot is naive. It looks one move ahead. A tail-reachability check or a
+   Hamiltonian cycle would beat every player here. Coached Jev beat simple
+   rules, not good code.
+
+### Shared limit
+
 8. Claude, coached Jev and the bot all died trapped, sliding down a wall into a
-   corner. Better judgment or better inputs delay the trap, but none of them
-   looks ahead. That is the current limit for every player.
+   corner. Better judgment or better inputs delay the trap, but no player looks
+   ahead.
+
+## Setup
+
+Needs [uv](https://docs.astral.sh/uv/) and a terminal of at least 42×24 for the
+live board. Put these in `.env`:
+
+```
+TYPESAFE_API_KEY=...
+ANTHROPIC_API_KEY=...
+JEV_MODEL=jev-1.13.0
+COACH_MODEL=claude-sonnet-5
+CLAUDE_PLAYER_MODEL=claude-sonnet-5
+```
 
 ## Run
 
 ```sh
 uv run python -m snake play                         # you play (arrows/WASD, q quits)
-uv run python -m snake run --player bot --digest    # baseline, free
+uv run python -m snake run --player bot --digest    # bot, free
 uv run python -m snake run --player jev --digest    # Jev alone
 uv run python -m snake run --player claude --digest # Claude alone, same inputs as Jev
-uv run python -m snake coach --games 3              # Jev + Claude, same seed each game
+uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
 uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 ```
 
-- `--seed N` sets the food layout. The default is 7.
-- `--max-moves N` caps a game.
-- `--starve-after N` ends a game after N moves without food. The default is 600;
-  `0` turns it off.
-- `--config file.json` starts from saved settings, for example a coach `best_config.json`.
-- `run` and `replay` show a live board with a side panel: score, hunger, steps to
-  food, open space and Jev's probabilities as bars. Keys: `space` pauses, `q`
-  stops. `--no-watch` gives text only.
-- `play --tick N` sets how fast the snake moves when you steer (ms per move,
-  default 120).
+| Flag | Commands | Effect |
+|---|---|---|
+| `--seed N` | all | Food layout. Default 7. |
+| `--player bot\|jev\|claude` | `run`, `coach` | Who plays. `run` defaults to `bot`, `coach` to `jev`. |
+| `--config file.json` | `run`, `coach` | Start from a saved config, such as a coach `best_config.json`. |
+| `--max-moves N` | `run`, `coach` | Cap a game. |
+| `--starve-after N` | `run`, `coach` | End a game after N moves without food. Default 600; `0` turns it off. |
+| `--games N` | `coach` | Games per session. Default 11. |
+| `--digest` | `run` | Print the death digest at the end. |
+| `--no-watch` | `run` | Text progress only, no live board. |
+| `--tick N` | `play` | Milliseconds per move when you steer. Default 120. |
 
-Set these in `.env`:
-
-```
-TYPESAFE_API_KEY=...
-ANTHROPIC_API_KEY=...
-COACH_MODEL=claude-sonnet-5
-JEV_MODEL=jev-1.13.0
-CLAUDE_PLAYER_MODEL=claude-sonnet-5
-```
+`run` and `replay` show a live board with a side panel. The panel has score,
+hunger, steps to food, open space, and the current decision. For Jev that is its
+probabilities as bars, and for Claude it is its reason. `space` pauses and `q`
+stops.
 
 ## How it works
 
-Each move:
+Math, counting and path-finding stay in code, because TypeSafe documents Jev as
+weak at them. The model only makes the judgment call.
 
-1. Code removes moves into walls or the body. It also withholds pocket moves
-   (open space < `pocket_ratio` × length) when a roomier move exists.
-2. Jev is asked one Choice (which direction) and one Score (how dangerous). The
-   state holds whatever facts `PromptConfig` turns on.
-3. Code re-checks Jev's answer before applying it.
-4. Everything is logged as one JSON line.
+### Each move
 
-After each game, Claude reads a digest of it. The digest holds the score, the
-cause of death, the longest drought, moves away from food, and low-confidence
-count. Claude proposes
-at most 2 edits to `PromptConfig`, each tied to an observation. The next game
-plays the best config so far plus those edits. A worse result never becomes the
-new baseline.
+1. Code builds the options. It drops moves into a wall or the body, and pocket
+   moves (see `pocket_ratio`).
+2. With one option left, it is applied without asking anyone.
+3. Otherwise the player picks. The bot applies its rule. Jev or Claude gets a
+   request built from the config.
+4. Code re-checks the answer before applying it. An answer outside the options
+   is replaced by the roomiest move and logged as `rejected`. None has occurred.
+5. The move, the request and the answer are logged as one JSON line.
+
+### Coaching loop
+
+After each game, Claude reads a digest of it. The digest has the score, the
+cause of death, the longest drought, moves away from food, trapped steps and the
+count of low-confidence decisions. Claude sees the digest, the current config
+and the score history, not individual moves. It returns at most 2 config edits,
+each tied to an observation. The next game plays the best config so far plus
+those edits, so a worse result never becomes the new baseline.
+
+### Config
+
+A `PromptConfig` (in `snake/prompt.py`) controls what goes into Jev's and
+Claude's requests. The config itself is not sent. These are the defaults, used
+whenever `--config` isn't passed, including every coach session's game 1:
+
+```json
+{
+  "include_grid": true,
+  "include_wall_distances": true,
+  "include_path_hint": false,
+  "include_space": true,
+  "move_instruction": "Which direction should the snake move next?",
+  "option_style": "plain",
+  "pocket_ratio": 1.0
+}
+```
+
+The best coached config (`runs/coach/20260923-163558_seed7/best_config.json`)
+changes two fields: `"include_path_hint": true` and
+`"option_style": "consequences"`.
+
+| Field | What it controls |
+|---|---|
+| `include_grid` | Adds `board` and `legend` to the state. |
+| `include_wall_distances` | Adds `cells_to_wall`. |
+| `include_path_hint` | Adds `shortest_path_to_food` (steps and first step, routed around the body). |
+| `include_space` | Adds `open_space_after_move` for each option. |
+| `move_instruction` | The text of the move question. |
+| `option_style` | The text of each option. |
+| `pocket_ratio` | Which cramped moves are hidden from the options. |
+
+`move_instruction` values that have been used:
+
+- Default: `"Which direction should the snake move next?"`
+- Claude's edit in an early coach test: `"Pick the direction that most reduces
+  the shortest-path distance to the food, unless that direction leaves less open
+  space than the snake's length; then pick the safest direction with the most
+  open space."`
+
+`option_style` for the same move-1 option:
+
+| Style | Text for `up` |
+|---|---|
+| `plain` | `move up to cell [10, 9]` |
+| `consequences` | `move up to cell [10, 9]; straight-line distance to food becomes 6; 398 open cells reachable afterwards` |
+
+When a move eats the food, `consequences` says `eats the food` in place of the
+distance.
+
+`pocket_ratio`: a move is a pocket if the open space after it is less than
+`pocket_ratio` × the snake's length after the move. Pockets are hidden unless
+every move is a pocket. Then all moves are shown and a warning is added to the
+state. This example has a snake of length 20, which is 21 after the move:
+
+| Move | Open space after | Hidden at 0.5 (< 10.5) | at 1.0 (< 21) | at 2.0 (< 42) |
+|---|---|---|---|---|
+| up | 350 | no | no | no |
+| left | 30 | no | no | yes |
+| right | 8 | yes | yes | yes |
+
+A lower ratio hides fewer moves, so the snake can enter traps. A higher ratio
+hides more, including routes to food, so the snake can starve. The article found
+an optimum: 640 when too strict, 290 when too loose, 850 in the middle. Here 1.6
+scored 930 against 1050 at 1.0, one game each.
 
 ### What each player receives
 
-The bot gets no payload. It is code that reads the game and applies its rule:
-shortest path, otherwise the roomiest move (`BotPlayer` in `snake/players.py`):
+**Bot.** No request. `BotPlayer` in `snake/players.py` applies this rule:
 
 ```python
 path = shortest_path(game)              # BFS around the body: (steps, first_move) or None
@@ -118,7 +210,7 @@ else:
     move = max(decision.offered, key=lambda m: (m.space, -m.food_distance)).move
 ```
 
-Jev gets one request per move. This is move 1 with default settings:
+**Jev.** One `POST /v1/systemone` per move. Move 1 with the default config:
 
 ```jsonc
 {
@@ -156,10 +248,11 @@ Jev gets one request per move. This is move 1 with default settings:
 }
 ```
 
-Answer: `up` 0.53, confidence 0.29.
+Answer: `up` 0.53, confidence 0.29. `danger` is logged and shown on the live
+board, but nothing acts on it yet.
 
-Coached Jev gets the same request with the coach's edits applied. In the best
-config (coach game 2) there are two of them:
+**Coached Jev.** The same request built from the best config. Its two edits
+change these parts:
 
 ```jsonc
 "facts": { ..., "shortest_path_to_food": {"steps": 7, "first_step": "up"} },  // include_path_hint
@@ -171,11 +264,8 @@ config (coach game 2) there are two of them:
 
 Answer: `up` 0.99, confidence 0.99.
 
-As coach, Claude never sees individual moves. After each game it gets the
-current config, the digest and the score history, and returns at most 2 edits.
-
-Claude as a player (`--player claude`, `ClaudePlayer`) gets one Messages API
-request per move. This is move 1 with default settings:
+**Claude as player.** `ClaudePlayer` sends one Messages API request per move,
+with the same state and options as Jev. Move 1 with the default config:
 
 ```jsonc
 {
@@ -204,6 +294,8 @@ request per move. This is move 1 with default settings:
 Answer: `{"move": "up", "reason": "Moves toward food, decreasing distance while avoiding walls."}`
 at 675 input and 35 output tokens, 2.2 s.
 
+**Claude as coach** gets no per-move request (see Coaching loop).
+
 | | Bot | Jev | Coached Jev | Claude |
 |---|---|---|---|---|
 | API call per move | none | Jev | Jev | Claude |
@@ -213,29 +305,33 @@ at 675 input and 35 output tokens, 2.2 s.
 | Returns | a move | move, probabilities, confidence | move, probabilities, confidence | move and a reason |
 | Decides the move | fixed rule | Jev | Jev | Claude |
 
-`danger` is logged and shown on the live board. Nothing acts on it yet.
+### Code
 
 | File | Role |
 |---|---|
 | `snake/engine.py` | Rules: board, moves, seeded food, death |
 | `snake/analysis.py` | Exact facts: legal moves, shortest path, open space (flood fill) |
-| `snake/prompt.py` | `PromptConfig` (the only thing the coach edits), pocket filter, Jev state and questions |
-| `snake/players.py` | `BotPlayer`; `JevPlayer` (raw HTTP to `/v1/systemone`) |
+| `snake/prompt.py` | `PromptConfig`, the pocket filter, and the state and questions |
+| `snake/players.py` | `BotPlayer`, `JevPlayer` (raw HTTP to `/v1/systemone`), `ClaudePlayer` |
 | `snake/runner.py` | One game loop and its logging |
 | `snake/coach.py` | Digest and Claude's edits (structured JSON output) |
-
-Math, counting and path-finding stay in code, because TypeSafe documents Jev as
-weak at them. Jev only makes the judgment call.
+| `snake/ui.py` | Board, side panel, pause and stop |
+| `snake/__main__.py` | Commands and flags |
 
 ## Logs
 
-- `runs/bot/` and `runs/jev/` hold one `<time>_seed<N>.jsonl` per game.
+- `runs/bot/`, `runs/jev/` and `runs/claude/` hold one `<time>_seed<N>.jsonl`
+  per game.
 - `runs/coach/<time>_seed<N>/` holds a session's `game_NN.jsonl`, `coach_NN.json`
   (the digest, Claude's proposal and the applied edits) and `best_config.json`.
+- A log's first line records the seed, player and config, and in logs made
+  after 2026-09-24 03:20, the starvation cap. The last line records the score, moves and
+  death.
 
 ## Differences from the article
 
 - The Jev model is pinned (`JEV_MODEL`), because `jev-latest` can move to a new model.
 - The 600-move starvation cap. Without it, a circling snake never ends.
-- Moves with only one safe option skip the Jev call.
+- Moves with only one safe option skip the model call.
 - The article describes Jev as deterministic. It isn't (see result 4).
+- The article has no Claude-alone player.
