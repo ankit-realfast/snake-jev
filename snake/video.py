@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .engine import Game
 
-PLAYERS = ("bot", "jev", "claude", "laya")   # coach sessions are left out on purpose
+PLAYERS = ("rules", "jev", "claude", "laya")   # coach sessions are left out on purpose
 
 COLORS = {
     "bg": (13, 17, 23), "grid": (22, 27, 34), "border": (48, 54, 61),
@@ -106,7 +106,7 @@ class Renderer:
 def pick_games(runs: Path) -> list:
     states = [(p, g) for p in PLAYERS if (runs / p).exists() and (g := best_game(runs / p))]
     if not states:
-        raise SystemExit("no finished games in runs/bot, runs/jev, runs/claude or runs/laya")
+        raise SystemExit("no finished games in runs/rules, runs/jev, runs/claude or runs/laya")
     return states
 
 

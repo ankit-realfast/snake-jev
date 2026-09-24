@@ -56,7 +56,7 @@ PLAYERS = {
     "jev": ("Jev", "TypeSafe's decision model Jev"),
     "laya": ("Laya", "Laya, an open-source local decision model"),
     "claude": ("Claude", "Claude, a language model"),
-    "bot": ("the bot", "a fixed-rule bot that ignores the question text; only pocket_ratio changes its play"),
+    "rules": ("the rule-based player", "a fixed rule that ignores the question text; only pocket_ratio changes its play"),
 }
 
 COACH_SYSTEM = """You coach a snake player: {description}. The player itself stays fixed; you can only change the inputs it sees, defined by a config.

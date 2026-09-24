@@ -25,7 +25,7 @@ the call needs judgment.
 
 ![Best game per player, side by side](runs/replays.gif)
 
-Best game from `runs/bot`, `runs/jev`, `runs/claude` and `runs/laya`, on one
+Best game from `runs/rules`, `runs/jev`, `runs/claude` and `runs/laya`, on one
 move clock. Coach sessions are not included.
 
 | Player | Score | Death | Cost per game |
@@ -33,7 +33,7 @@ move clock. Coach sessions are not included.
 | Jev, best coached config (3 games) | 1050, 990, **1140** (mean ~1060) | trapped | ~$0.07 |
 | Claude alone, default inputs (`claude-sonnet-5`) | **1120** (3,121 moves) | trapped | $4.96 |
 | Jev + Claude coach session | 110 → 1050 → 930 | trapped | ~$0.05 per game + one coach call |
-| Bot: shortest path, no AI | 800 | trapped | $0 |
+| Rule-based: shortest path, no AI | 800 | trapped | $0 |
 | Jev alone, default inputs | 110, 270, 390 | starved | ~$0.05 |
 | Laya alone, default inputs (`multilingual`, local) | 0, 0 (identical games) | starved | $0 |
 | Laya, best coached config | 0 | starved | $0 |
@@ -80,13 +80,13 @@ Coach game 1 uses the default inputs, so it also counts as a Jev-alone game.
    split by move 32. Determinism gives clean same-seed replays, but it also means
    a loop never breaks. Laya circled a 2×2 square until the starvation cap. Jev
    once circled for ~400 moves and got out when a near-tie flipped.
-9. The bot is naive. It looks one move ahead. A tail-reachability check or a
+9. The rule-based player is naive. It looks one move ahead. A tail-reachability check or a
    Hamiltonian cycle would beat every player here. Coached Jev beat simple
    rules, not good code.
 
 ### Shared limit
 
-10. Claude, coached Jev (all 3 best-config games) and the bot all died trapped,
+10. Claude, coached Jev (all 3 best-config games) and the rule-based player all died trapped,
     sliding down a wall into a corner. Better judgment or better inputs delay the
     trap, but no player looks ahead.
 
@@ -113,19 +113,19 @@ changes viewing speed only, not the moves. It defaults to 30 when unset.
 
 ```sh
 uv run python -m snake play                         # you play (arrows/WASD, q quits)
-uv run python -m snake run --player bot --digest    # bot, free
+uv run python -m snake run --player rules --digest  # rule-based, free
 uv run python -m snake run --player jev --digest    # Jev alone
 uv run python -m snake run --player claude --digest # Claude alone, same inputs as Jev
 uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
-uv run python -m snake replay runs/bot/<time>_seed7_default.jsonl
+uv run python -m snake replay runs/rules/<time>_seed7_default.jsonl
 uv run python -m snake video                        # runs/replays.gif
 ```
 
 | Flag | Commands | Effect |
 |---|---|---|
 | `--seed N` | all | Food layout. Default 7. |
-| `--player bot\|jev\|claude\|laya` | `run`, `coach` | Who plays. `run` defaults to `bot`, `coach` to `jev`. |
+| `--player rules\|jev\|claude\|laya` | `run`, `coach` | Who plays. `run` defaults to `rules`, `coach` to `jev`. |
 | `--config file.json` | `run`, `coach` | Start from a saved config, such as a coach `best_config.json`. |
 | `--max-moves N` | `run`, `coach` | Cap a game. |
 | `--starve-after N` | `run`, `coach` | End a game after N moves without food. Default 600; `0` turns it off. |
@@ -149,7 +149,7 @@ weak at them. The model only makes the judgment call.
 1. Code builds the options. It drops moves into a wall or the body, and pocket
    moves (see `pocket_ratio`).
 2. With one option left, it is applied without asking anyone.
-3. Otherwise the player picks. The bot applies its rule. Jev, Laya or Claude gets
+3. Otherwise the player picks. The rule-based player applies its rule. Jev, Laya or Claude gets
    a request built from the config.
 4. Code re-checks the answer before applying it. An answer outside the options
    is replaced by the roomiest move and logged as `rejected`. None has occurred.
@@ -232,7 +232,7 @@ scored 930 against 1050 at 1.0, one game each.
 
 ### What each player receives
 
-**Bot.** No request. `BotPlayer` in `snake/players.py` applies this rule:
+**Rule-based.** No request. `RulePlayer` in `snake/players.py` applies this rule:
 
 ```python
 path = shortest_path(game)              # BFS around the body: (steps, first_move) or None
@@ -336,7 +336,7 @@ in 63 ms. Game results are in results 7–8.
 
 **Claude as coach** gets no per-move request (see Coaching loop).
 
-| | Bot | Jev | Coached Jev | Claude |
+| | Rule-based | Jev | Coached Jev | Claude |
 |---|---|---|---|---|
 | API call per move | none | Jev | Jev | Claude |
 | Real path to food | computed and used | not given | given (`first_step`) | not given (default config) |
@@ -352,7 +352,7 @@ in 63 ms. Game results are in results 7–8.
 | `snake/engine.py` | Rules: board, moves, seeded food, death |
 | `snake/analysis.py` | Exact facts: legal moves, shortest path, open space (flood fill) |
 | `snake/prompt.py` | `PromptConfig`, the pocket filter, and the state and questions |
-| `snake/players.py` | `BotPlayer`, `JevPlayer` (raw HTTP to `/v1/systemone`), `ClaudePlayer`, `LayaPlayer` |
+| `snake/players.py` | `RulePlayer`, `JevPlayer` (raw HTTP to `/v1/systemone`), `ClaudePlayer`, `LayaPlayer` |
 | `snake/runner.py` | One game loop and its logging |
 | `snake/coach.py` | Digest and Claude's edits (structured JSON output) |
 | `snake/ui.py` | Board, side panel, pause and stop |
@@ -360,7 +360,7 @@ in 63 ms. Game results are in results 7–8.
 
 ## Logs
 
-- `runs/bot/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one file per
+- `runs/rules/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one file per
   game, named `<time>_seed<N>_<config>.jsonl`.
 - `runs/coach/<time>_seed<N>_<player>/` holds a session's `game_NN_<config>.jsonl`,
   `coach_NN.json` (the digest, Claude's proposal and the applied edits) and

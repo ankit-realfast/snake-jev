@@ -17,11 +17,11 @@ from .prompt import Decision, PromptConfig, build_questions, build_state
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 
 
-class BotPlayer:
+class RulePlayer:
     """Baseline with no AI: follow the shortest path if the filter allows
     that step, otherwise take the roomiest option."""
 
-    name = "bot"
+    name = "rules"
 
     def choose(self, game: Game, config: PromptConfig, decision: Decision) -> dict:
         offered = {m.move: m for m in decision.offered}

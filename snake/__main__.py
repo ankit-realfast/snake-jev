@@ -1,7 +1,7 @@
 """uv run python -m snake <command>
 
   play                      you play, arrow keys / WASD, q to quit
-  run --player bot|jev|claude|laya  one game on a live board, logged to runs/ (--no-watch for text only)
+  run --player rules|jev|claude|laya  one game on a live board, logged to runs/ (--no-watch for text only)
   coach --games 11          Jev plays on the live board, Claude edits the prompt between games
   replay runs/.../x.jsonl   watch a logged game
   video                     best game per player side by side: runs/replays.gif
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from .coach import Coach, apply_edits, digest
 from .engine import OPPOSITE, Game
-from .players import BotPlayer, ClaudePlayer, JevPlayer, LayaPlayer
+from .players import ClaudePlayer, JevPlayer, LayaPlayer, RulePlayer
 from .prompt import PromptConfig
 from .runner import play_game
 from . import ui, video
@@ -110,7 +110,7 @@ def cmd_play(args):
 
 
 def make_player(name):
-    return {"bot": BotPlayer, "jev": JevPlayer, "claude": ClaudePlayer, "laya": LayaPlayer}[name]()
+    return {"rules": RulePlayer, "jev": JevPlayer, "claude": ClaudePlayer, "laya": LayaPlayer}[name]()
 
 
 def progress(game, record):
@@ -254,7 +254,7 @@ def main():
 
     for name in ("run", "coach"):
         s = sub.add_parser(name)
-        s.add_argument("--player", choices=["bot", "jev", "claude", "laya"], default="jev" if name == "coach" else "bot")
+        s.add_argument("--player", choices=["rules", "jev", "claude", "laya"], default="jev" if name == "coach" else "rules")
         s.add_argument("--seed", type=int, default=7)
         s.add_argument("--config", help="PromptConfig JSON file")
         s.add_argument("--max-moves", type=int)

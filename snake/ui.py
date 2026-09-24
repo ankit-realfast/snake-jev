@@ -128,7 +128,7 @@ def decision_lines(record: dict | None) -> list:
         lines.append([("NO CHOICE", "title")])
         lines.append([(record["forced"].replace("_", " ") + f" → {record['move']}", "plain")])
     else:
-        lines.append([("BOT RULE", "title")])
+        lines.append([("RULE-BASED", "title")])
         lines.append([(f"→ {record['move']}", "pick")])
     withheld = record.get("withheld_pockets")
     if withheld:
