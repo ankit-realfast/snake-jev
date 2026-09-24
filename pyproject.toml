@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anthropic>=1.8.0",
     "httpx>=0.28.1",
+    "laya>=0.3.20",
     "python-dotenv>=1.2.3",
 ]
 

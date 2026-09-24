@@ -138,3 +138,36 @@ class ClaudePlayer:
             return {**record, "move": None, "reason": "refused"}
         answer = json.loads(next(b.text for b in response.content if b.type == "text"))
         return {**record, "move": answer["move"], "reason": answer["reason"]}
+
+
+class LayaPlayer:
+    """Laya, an open-source local model with Jev's question types. It gets the
+    exact request Jev gets and runs on this machine, so there is no API cost."""
+
+    name = "laya"
+
+    def __init__(self):
+        from laya import Router
+        # The multilingual checkpoint accepts long inputs; the state is ~350 of
+        # its tokens, and max_len leaves headroom as the snake grows.
+        self.model = "multilingual"
+        self.router = Router(default=self.model)
+
+    def choose(self, game: Game, config: PromptConfig, decision: Decision) -> dict:
+        state = build_state(game, config, decision)
+        questions = build_questions(config, decision)
+        start = time.perf_counter()
+        data = self.router.predict(state, questions, model=self.model, max_len=2048)
+        latency = time.perf_counter() - start
+        move_answer = data["answers"]["move"]
+        return {
+            "move": move_answer["choice"],
+            "probabilities": move_answer.get("probabilities"),
+            "confidence": move_answer.get("confidence"),
+            "danger": data["answers"].get("danger", {}).get("score"),
+            "latency_s": round(latency, 3),
+            "usage": data.get("usage"),
+            "model": data.get("routing", {}).get("repo"),
+            "state": state,
+            "questions": questions,
+        }

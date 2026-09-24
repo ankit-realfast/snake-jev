@@ -29,6 +29,7 @@ the call needs judgment.
 | Jev + Claude coach | 110 → **1050** → 930 | trapped | ~$0.05 per game + one coach call |
 | Bot: shortest path, no AI | 800 | trapped | $0 |
 | Jev alone, default inputs | 110, 270, 390 | starved | ~$0.05 |
+| Laya alone, default inputs (`multilingual`, local) | 0, 0 (identical games) | starved | $0 |
 
 Each score is one game. Coach game 1 uses the default inputs, so it also counts
 as a Jev-alone game.
@@ -56,20 +57,32 @@ as a Jev-alone game.
    it reads direction from coordinates, which uncoached Jev could not. It took
    about 1.9 s and $0.0016 a move: about 100× coached Jev's cost for about 7%
    more score.
-7. The bot is naive. It looks one move ahead. A tail-reachability check or a
+7. Laya alone played at chance. It never ate. 50% of its moves went toward
+   food, its choices split almost evenly across the four directions, and its
+   median confidence was 0.035. Uncoached Jev scored 110–390 on the same
+   request. Laya's own benchmarks put its base checkpoints below a majority-class
+   baseline without fine-tuning. It ran 65 ms a move, locally, at no cost.
+8. Laya is deterministic. Two games with the same settings were identical: all
+   600 moves, with the same probabilities to four decimals. Jev's identical games
+   split by move 32. Determinism gives clean same-seed replays, but it also means
+   a loop never breaks. Laya circled a 2×2 square until the starvation cap. Jev
+   once circled for ~400 moves and got out when a near-tie flipped.
+9. The bot is naive. It looks one move ahead. A tail-reachability check or a
    Hamiltonian cycle would beat every player here. Coached Jev beat simple
    rules, not good code.
 
 ### Shared limit
 
-8. Claude, coached Jev and the bot all died trapped, sliding down a wall into a
-   corner. Better judgment or better inputs delay the trap, but no player looks
-   ahead.
+10. Claude, coached Jev and the bot all died trapped, sliding down a wall into a
+   corner. Better judgment or better inputs delay the trap, but no player
+    looks ahead.
 
 ## Setup
 
 Needs [uv](https://docs.astral.sh/uv/) and a terminal of at least 42×24 for the
-live board. Put these in `.env`:
+live board. The Laya player
+downloads a ~1.7 GB checkpoint from Hugging Face on first use and runs locally
+(tested on an Apple M5, 16 GB). Put these in `.env`:
 
 ```
 TYPESAFE_API_KEY=...
@@ -86,6 +99,7 @@ uv run python -m snake play                         # you play (arrows/WASD, q q
 uv run python -m snake run --player bot --digest    # bot, free
 uv run python -m snake run --player jev --digest    # Jev alone
 uv run python -m snake run --player claude --digest # Claude alone, same inputs as Jev
+uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
 uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 ```
@@ -93,7 +107,7 @@ uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 | Flag | Commands | Effect |
 |---|---|---|
 | `--seed N` | all | Food layout. Default 7. |
-| `--player bot\|jev\|claude` | `run`, `coach` | Who plays. `run` defaults to `bot`, `coach` to `jev`. |
+| `--player bot\|jev\|claude\|laya` | `run`, `coach` | Who plays. `run` defaults to `bot`, `coach` to `jev`. |
 | `--config file.json` | `run`, `coach` | Start from a saved config, such as a coach `best_config.json`. |
 | `--max-moves N` | `run`, `coach` | Cap a game. |
 | `--starve-after N` | `run`, `coach` | End a game after N moves without food. Default 600; `0` turns it off. |
@@ -103,8 +117,8 @@ uv run python -m snake replay runs/bot/<time>_seed7.jsonl
 | `--tick N` | `play` | Milliseconds per move when you steer. Default 120. |
 
 `run` and `replay` show a live board with a side panel. The panel has score,
-hunger, steps to food, open space, and the current decision. For Jev that is its
-probabilities as bars, and for Claude it is its reason. `space` pauses and `q`
+hunger, steps to food, open space, and the current decision. For Jev and Laya that is
+their probabilities as bars, and for Claude it is its reason. `space` pauses and `q`
 stops.
 
 ## How it works
@@ -117,8 +131,8 @@ weak at them. The model only makes the judgment call.
 1. Code builds the options. It drops moves into a wall or the body, and pocket
    moves (see `pocket_ratio`).
 2. With one option left, it is applied without asking anyone.
-3. Otherwise the player picks. The bot applies its rule. Jev or Claude gets a
-   request built from the config.
+3. Otherwise the player picks. The bot applies its rule. Jev, Laya or Claude gets
+   a request built from the config.
 4. Code re-checks the answer before applying it. An answer outside the options
    is replaced by the roomiest move and logged as `rejected`. None has occurred.
 5. The move, the request and the answer are logged as one JSON line.
@@ -134,8 +148,8 @@ those edits, so a worse result never becomes the new baseline.
 
 ### Config
 
-A `PromptConfig` (in `snake/prompt.py`) controls what goes into Jev's and
-Claude's requests. The config itself is not sent. These are the defaults, used
+A `PromptConfig` (in `snake/prompt.py`) controls what goes into Jev's, Laya's
+and Claude's requests. The config itself is not sent. These are the defaults, used
 whenever `--config` isn't passed, including every coach session's game 1:
 
 ```json
@@ -294,6 +308,14 @@ with the same state and options as Jev. Move 1 with the default config:
 Answer: `{"move": "up", "reason": "Moves toward food, decreasing distance while avoiding walls."}`
 at 675 input and 35 output tokens, 2.2 s.
 
+**Laya.** [Laya](https://github.com/NandhaKishorM/laya) is an open-source local
+model with Jev's question types. `LayaPlayer` sends it the exact Jev request
+through `laya.Router`, using the `multilingual` checkpoint with `max_len=2048`.
+The request is about 350 of that checkpoint's tokens. Its answer has Jev's shape
+(`choice`, `probabilities`, `confidence`, `score`). On move 1 it answered `down`
+(away from the food) with up 0.30, down 0.39, right 0.31 and confidence 0.007,
+in 63 ms. Game results are in results 7–8.
+
 **Claude as coach** gets no per-move request (see Coaching loop).
 
 | | Bot | Jev | Coached Jev | Claude |
@@ -312,7 +334,7 @@ at 675 input and 35 output tokens, 2.2 s.
 | `snake/engine.py` | Rules: board, moves, seeded food, death |
 | `snake/analysis.py` | Exact facts: legal moves, shortest path, open space (flood fill) |
 | `snake/prompt.py` | `PromptConfig`, the pocket filter, and the state and questions |
-| `snake/players.py` | `BotPlayer`, `JevPlayer` (raw HTTP to `/v1/systemone`), `ClaudePlayer` |
+| `snake/players.py` | `BotPlayer`, `JevPlayer` (raw HTTP to `/v1/systemone`), `ClaudePlayer`, `LayaPlayer` |
 | `snake/runner.py` | One game loop and its logging |
 | `snake/coach.py` | Digest and Claude's edits (structured JSON output) |
 | `snake/ui.py` | Board, side panel, pause and stop |
@@ -320,7 +342,7 @@ at 675 input and 35 output tokens, 2.2 s.
 
 ## Logs
 
-- `runs/bot/`, `runs/jev/` and `runs/claude/` hold one `<time>_seed<N>.jsonl`
+- `runs/bot/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one `<time>_seed<N>.jsonl`
   per game.
 - `runs/coach/<time>_seed<N>/` holds a session's `game_NN.jsonl`, `coach_NN.json`
   (the digest, Claude's proposal and the applied edits) and `best_config.json`.
@@ -333,5 +355,5 @@ at 675 input and 35 output tokens, 2.2 s.
 - The Jev model is pinned (`JEV_MODEL`), because `jev-latest` can move to a new model.
 - The 600-move starvation cap. Without it, a circling snake never ends.
 - Moves with only one safe option skip the model call.
-- The article describes Jev as deterministic. It isn't (see result 4).
-- The article has no Claude-alone player.
+- The article describes Jev as deterministic. It isn't (see result 4). Laya is (result 8).
+- The article has no Claude-alone or Laya player.
