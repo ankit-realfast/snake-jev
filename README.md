@@ -23,10 +23,11 @@ the call needs judgment.
 
 ## Results (seed 7, no move cap)
 
-![Best game per player, side by side](runs/replays.gif)
+![Best and worst game per player](runs/replays.gif)
 
-Best game from `runs/rules`, `runs/jev`, `runs/claude` and `runs/laya`, on one
-move clock. Coach sessions are not included.
+Best and worst game from `runs/rules`, `runs/jev`, `runs/claude` and
+`runs/laya`, in one row grouped by player, on one move clock. A player with one
+game gets a single board. Coach sessions are not included.
 
 | Player | Score | Death | Cost per game |
 |---|---|---|---|
@@ -119,7 +120,7 @@ uv run python -m snake run --player claude --digest # Claude alone, same inputs 
 uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
 uv run python -m snake replay runs/rules/<time>_seed7_default.jsonl
-uv run python -m snake video                        # runs/replays.gif
+uv run python -m snake video                        # best and worst game per player: runs/replays.gif
 ```
 
 | Flag | Commands | Effect |

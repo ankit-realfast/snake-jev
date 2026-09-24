@@ -1,4 +1,5 @@
-"""Render the best game from each player folder side by side as one GIF.
+"""Render the best and worst game from each player folder as one GIF, all in
+one row and grouped by player. A player with a single game gets one board.
 A GIF plays inline in a GitHub README, which an MP4 does not.
 
 All panels share one clock: a frame at move t shows move t on every board. A
@@ -30,10 +31,20 @@ def load(path: Path) -> dict:
             "moves": [l["move"] for l in lines if l["type"] == "move"]}
 
 
-def best_game(folder: Path) -> dict | None:
-    """Highest final score; ties go to the most recent log."""
-    games = [g for g in (load(p) for p in sorted(folder.glob("*.jsonl"))) if g["end"]]
-    return max(games, key=lambda g: (g["end"]["score"], g["path"].name)) if games else None
+def finished_games(folder: Path) -> list[dict]:
+    return [g for g in (load(p) for p in sorted(folder.glob("*.jsonl"))) if g["end"]]
+
+
+def best_and_worst(folder: Path) -> tuple[dict, dict | None] | None:
+    """Best: highest score, ties to the most recent log. Worst: lowest score,
+    ties to the shortest game. Worst is None when there is only one game."""
+    games = finished_games(folder)
+    if not games:
+        return None
+    best = max(games, key=lambda g: (g["end"]["score"], g["path"].name))
+    rest = [g for g in games if g is not best]
+    worst = min(rest, key=lambda g: (g["end"]["score"], g["end"]["moves"])) if rest else None
+    return best, worst
 
 
 def config_label(path: Path) -> str:
@@ -50,36 +61,50 @@ def font(size: int):
 
 
 class Renderer:
-    """Draws all panels for one moment in time. `cell` sets the scale."""
+    """Draws all boards for one moment in time, in one row. `cell` sets the scale."""
 
     def __init__(self, states, cell: int):
+        # states: (player, label, config, game); boards of one player sit together.
         self.states, self.cell = states, cell
         self.board = 20 * cell
-        self.pad = cell + 4
-        self.header = int(cell * 5)
+        self.pad = cell + 4            # between boards of one player
+        self.gap = cell * 3            # between players, with a divider in the middle
+        self.header = int(cell * 6.4)
         self.footer = int(cell * 2.6)
-        self.width = self.pad + len(states) * (self.board + self.pad)
+        self.xs, x = [], self.pad
+        for i, (player, *_ ) in enumerate(states):
+            if i and player != states[i - 1][0]:
+                x += self.gap - self.pad
+            self.xs.append(x)
+            x += self.board + self.pad
+        self.width = x
         self.height = self.header + self.board + self.footer
         self.big, self.small = font(int(cell * 1.6)), font(int(cell * 1.2))
-        self.games = [Game(seed=g["start"]["seed"], starve_after=None) for _, g in states]
+        self.games = [Game(seed=g["start"]["seed"], starve_after=None) for *_, g in states]
         self.applied = [0] * len(states)
 
     def frame(self, now: int) -> Image.Image:
         img = Image.new("RGB", (self.width, self.height), COLORS["bg"])
         d = ImageDraw.Draw(img)
-        for i, (player, g) in enumerate(self.states):
+        for i, (player, label, config, g) in enumerate(self.states):
             game = self.games[i]
             # Replay moves up to `now`. The fatal move never changes the board.
             while self.applied[i] < min(now, len(g["moves"])) and game.alive:
                 game.step(g["moves"][self.applied[i]])
                 self.applied[i] += 1
-            self._panel(d, self.pad + i * (self.board + self.pad), player, g, game, now)
+            first = i == 0 or player != self.states[i - 1][0]
+            if first and i:
+                mid = self.xs[i] - self.gap // 2
+                d.line([mid, int(self.cell * 0.6), mid, self.height - int(self.cell * 0.6)], fill=COLORS["border"])
+            self._panel(d, self.xs[i], player.upper() if first else "", label, config, g, game, now)
         return img
 
-    def _panel(self, d, x0, player, g, game, now):
+    def _panel(self, d, x0, title, label, config, g, game, now):
         c, top = self.cell, self.header
-        d.text((x0, int(c * 0.6)), player.upper(), fill=COLORS["text"], font=self.big)
-        d.text((x0, int(c * 2.7)), config_label(g["path"]), fill=COLORS["dim"], font=self.small)
+        if title:
+            d.text((x0, int(c * 0.6)), title, fill=COLORS["text"], font=self.big)
+        d.text((x0, int(c * 2.9)), label, fill=COLORS["text"], font=self.small)
+        d.text((x0, int(c * 4.5)), config, fill=COLORS["dim"], font=self.small)
         d.rectangle([x0 - 1, top - 1, x0 + self.board, top + self.board], outline=COLORS["border"])
         for y in range(20):
             for x in range(20):
@@ -98,20 +123,31 @@ class Renderer:
         d.text((x0, y), f"move {min(now, len(g['moves']))}", fill=COLORS["dim"], font=self.small)
         d.text((x0 + int(self.board * 0.42), y), f"score {game.score}", fill=COLORS["text"], font=self.small)
         if now >= len(g["moves"]):
-            label = g["end"]["death"]
-            w = d.textlength(label, font=self.small)
-            d.text((x0 + self.board - w, y), label, fill=COLORS["food"], font=self.small)
+            death = g["end"]["death"]
+            w = d.textlength(death, font=self.small)
+            d.text((x0 + self.board - w, y), death, fill=COLORS["food"], font=self.small)
 
 
 def pick_games(runs: Path) -> list:
-    states = [(p, g) for p in PLAYERS if (runs / p).exists() and (g := best_game(runs / p))]
-    if not states:
+    """Boards as (player, label, config, game), grouped by player: best then
+    worst, or one board when a player has a single game."""
+    players = [p for p in PLAYERS if (runs / p).exists() and best_and_worst(runs / p)]
+    if not players:
         raise SystemExit("no finished games in runs/rules, runs/jev, runs/claude or runs/laya")
+    states = []
+    for p in players:
+        best, worst = best_and_worst(runs / p)
+        if worst is None:
+            states.append((p, "1 game", config_label(best["path"]), best))
+        else:
+            n = len(finished_games(runs / p))
+            states.append((p, f"best of {n}", config_label(best["path"]), best))
+            states.append((p, f"worst of {n}", config_label(worst["path"]), worst))
     return states
 
 
 def ticks(states, step: int) -> list[int]:
-    longest = max(len(g["moves"]) for _, g in states)
+    longest = max(len(g["moves"]) for *_, g in states)
     return list(range(0, longest, step)) + [longest]
 
 
@@ -127,4 +163,4 @@ def write_gif(runs: Path, out: Path, step: int = 4, fps: int = 15, hold_s: float
     frames[0].save(out, save_all=True, append_images=frames[1:], loop=0, optimize=True,
                    duration=[ms] * (len(frames) - 1) + [int(hold_s * 1000)])
     return {"out": out, "seconds": round((len(frames) - 1) * ms / 1000 + hold_s, 1), "size": (r.width, r.height),
-            "panels": [(p, g["path"].name, g["end"]["score"]) for p, g in states]}
+            "panels": [(f"{p} {label}", g["path"].name, g["end"]["score"]) for p, label, _, g in states]}

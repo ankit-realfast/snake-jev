@@ -4,7 +4,7 @@
   run --player rules|jev|claude|laya  one game on a live board, logged to runs/ (--no-watch for text only)
   coach --games 11          Jev plays on the live board, Claude edits the prompt between games
   replay runs/.../x.jsonl   watch a logged game
-  video                     best game per player side by side: runs/replays.gif
+  video                     best and worst game per player: runs/replays.gif
 """
 
 from __future__ import annotations
@@ -241,7 +241,7 @@ def cmd_replay(args):
 def cmd_video(args):
     gif = video.write_gif(RUNS, RUNS / "replays.gif")
     for player, log, score in gif["panels"]:
-        print(f"  {player:<7} {score:>5}  {log}")
+        print(f"  {player:<14} {score:>5}  {log}")
     print(f"{gif['out']}  {gif['size'][0]}x{gif['size'][1]}, {gif['seconds']}s")
 
 
