@@ -113,7 +113,7 @@ def clear_progress():
 
 def cmd_run(args):
     config = PromptConfig(**json.loads(Path(args.config).read_text())) if args.config else PromptConfig()
-    out = RUNS / args.player / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}.jsonl"
+    out = RUNS / args.player / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{args.seed}_{config.label()}.jsonl"
     player = make_player(args.player)
 
     def play(on_move):
@@ -152,14 +152,14 @@ def cmd_coach(args):
 
     for i in range(1, args.games + 1):
         print(f"\ngame {i}/{args.games}  seed {args.seed}")
-        log = run_dir / f"game_{i:02d}.jsonl"
+        log = run_dir / f"game_{i:02d}_{config.label()}.jsonl"
         game = play_game(player, config, args.seed, log,
                          max_moves=args.max_moves, starve_after=args.starve_after, on_move=progress)
         d = digest(log)
         clear_progress()
         print(f"  score {d['score']}  moves {d['moves']}  death {d['death']}  "
               f"longest drought {d['longest_stretch_without_food']}")
-        history.append({"game": i, "score": d["score"], "config": asdict(config)})
+        history.append({"game": i, "score": d["score"], "config": asdict(config), "log": str(log)})
         if d["score"] > best_score:
             best, best_score = config, d["score"]
             (run_dir / "best_config.json").write_text(best.to_json())
@@ -184,7 +184,7 @@ def digest_for_best(run_dir, history, best):
     """The coach edits the best config, so show it the best game's digest."""
     for h in reversed(history):
         if h["config"] == asdict(best):
-            return digest(run_dir / f"game_{h['game']:02d}.jsonl")
+            return digest(Path(h["log"]))
     raise LookupError("best config has no game")
 
 

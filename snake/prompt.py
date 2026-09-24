@@ -8,6 +8,7 @@ seed can be traced to a config difference.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, fields
 
@@ -52,6 +53,27 @@ class PromptConfig:
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
+
+    def label(self) -> str:
+        """Short name for log files: "default", or the changes from the
+        defaults joined with "+", e.g. "path_hint+consequences". A rewritten
+        move_instruction becomes "instr-" plus a hash of its text."""
+        default, parts = PromptConfig(), []
+        if self.include_grid != default.include_grid:
+            parts.append("no_grid")
+        if self.include_wall_distances != default.include_wall_distances:
+            parts.append("no_walls")
+        if self.include_path_hint != default.include_path_hint:
+            parts.append("path_hint")
+        if self.include_space != default.include_space:
+            parts.append("no_space")
+        if self.move_instruction != default.move_instruction:
+            parts.append("instr-" + hashlib.sha1(self.move_instruction.encode()).hexdigest()[:6])
+        if self.option_style != default.option_style:
+            parts.append(self.option_style)
+        if self.pocket_ratio != default.pocket_ratio:
+            parts.append(f"pocket{self.pocket_ratio:g}")
+        return "+".join(parts) or "default"
 
 
 @dataclass

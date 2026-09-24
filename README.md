@@ -25,43 +25,51 @@ the call needs judgment.
 
 | Player | Score | Death | Cost per game |
 |---|---|---|---|
+| Jev, best coached config (3 games) | 1050, 990, **1140** (mean ~1060) | trapped | ~$0.07 |
 | Claude alone, default inputs (`claude-sonnet-5`) | **1120** (3,121 moves) | trapped | $4.96 |
-| Jev + Claude coach | 110 → **1050** → 930 | trapped | ~$0.05 per game + one coach call |
+| Jev + Claude coach session | 110 → 1050 → 930 | trapped | ~$0.05 per game + one coach call |
 | Bot: shortest path, no AI | 800 | trapped | $0 |
 | Jev alone, default inputs | 110, 270, 390 | starved | ~$0.05 |
 | Laya alone, default inputs (`multilingual`, local) | 0, 0 (identical games) | starved | $0 |
+| Laya, best coached config | 0 | starved | $0 |
 
-Each score is one game. Coach game 1 uses the default inputs, so it also counts
-as a Jev-alone game.
+The best coached config is `runs/coach/20260923-163558_seed7/best_config.json`.
+Its first game (1050) is coach game 2. The other two are replays with `--config`.
+Coach game 1 uses the default inputs, so it also counts as a Jev-alone game.
 
 ### Coaching
 
 1. Jev's failures came from missing information, not bad judgment. Turning on
-   the shortest-path hint took it from 110 to 1050.
+   the shortest-path hint took it from 110 to 1050. Two replays of that config
+   scored 990 and 1140, so the gain holds across games.
 2. Claude found that fix from the death digest alone. Jev's weights never changed.
 
 ### Jev's behavior
 
-3. A decision takes about 0.4 s and about 630 input tokens, roughly $0.05 for a
-   2,000-move game.
+3. A decision takes about 0.4 s and about 650 Jev-counted input tokens, roughly
+   $0.05–0.07 a game.
 4. Jev is not deterministic. The same state and questions give slightly
    different probabilities (±0.05–0.07), and near-ties flip the chosen move.
-   TypeSafe's docs say the same. Identical settings scored 110, 270 and 390, so
-   gaps under about 100 points between single games can be noise.
+   TypeSafe's docs say the same. Identical settings scored 110–390 (default) and
+   990–1140 (best config), so gaps under about 150 points between single games
+   can be noise.
 5. Low confidence marks the coin-flip moves. Two identical seed-7 games split at
    a move where confidence was 0.0 and 0.1.
 
 ### Players compared
 
-6. Claude alone scored the most (1120) without the path hint. Its reasons show
-   it reads direction from coordinates, which uncoached Jev could not. It took
-   about 1.9 s and $0.0016 a move: about 100× coached Jev's cost for about 7%
-   more score.
-7. Laya alone played at chance. It never ate. 50% of its moves went toward
-   food, its choices split almost evenly across the four directions, and its
-   median confidence was 0.035. Uncoached Jev scored 110–390 on the same
-   request. Laya's own benchmarks put its base checkpoints below a majority-class
-   baseline without fine-tuning. It ran 65 ms a move, locally, at no cost.
+6. Coached Jev and Claude alone tie on score: a mean of ~1060 over 3 games
+   against 1120 in one game, inside the noise from result 4. Claude needs no
+   coaching or path hint. Its reasons show it reads direction from coordinates,
+   which uncoached Jev could not. It costs about 70× more per game ($4.96 vs
+   ~$0.07) and takes about 1.9 s a move against Jev's 0.4 s.
+7. Laya played at chance, with and without the best config. It never ate, 50%
+   of its moves went toward food, and its median confidence was 0.035. With the
+   path hint in its request on 576 moves, it followed the hinted first step on
+   45%, about what random picks among 2–3 options give. Jev went from 110 to 1050
+   on the same hint. So Laya's gap is not missing information. Laya's own
+   benchmarks put its base checkpoints below a majority-class baseline without
+   fine-tuning. It runs 65 ms a move, locally, at no cost.
 8. Laya is deterministic. Two games with the same settings were identical: all
    600 moves, with the same probabilities to four decimals. Jev's identical games
    split by move 32. Determinism gives clean same-seed replays, but it also means
@@ -73,9 +81,9 @@ as a Jev-alone game.
 
 ### Shared limit
 
-10. Claude, coached Jev and the bot all died trapped, sliding down a wall into a
-   corner. Better judgment or better inputs delay the trap, but no player
-    looks ahead.
+10. Claude, coached Jev (all 3 best-config games) and the bot all died trapped,
+    sliding down a wall into a corner. Better judgment or better inputs delay the
+    trap, but no player looks ahead.
 
 ## Setup
 
@@ -101,7 +109,7 @@ uv run python -m snake run --player jev --digest    # Jev alone
 uv run python -m snake run --player claude --digest # Claude alone, same inputs as Jev
 uv run python -m snake run --player laya --digest   # Laya, local, same request as Jev
 uv run python -m snake coach --games 3              # Jev + Claude coach, same seed each game
-uv run python -m snake replay runs/bot/<time>_seed7.jsonl
+uv run python -m snake replay runs/bot/<time>_seed7_default.jsonl
 ```
 
 | Flag | Commands | Effect |
@@ -342,13 +350,18 @@ in 63 ms. Game results are in results 7–8.
 
 ## Logs
 
-- `runs/bot/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one `<time>_seed<N>.jsonl`
-  per game.
-- `runs/coach/<time>_seed<N>/` holds a session's `game_NN.jsonl`, `coach_NN.json`
-  (the digest, Claude's proposal and the applied edits) and `best_config.json`.
-- A log's first line records the seed, player and config, and in logs made
-  after 2026-09-24 03:20, the starvation cap. The last line records the score, moves and
-  death.
+- `runs/bot/`, `runs/jev/`, `runs/claude/` and `runs/laya/` hold one file per
+  game, named `<time>_seed<N>_<config>.jsonl`.
+- `runs/coach/<time>_seed<N>/` holds a session's `game_NN_<config>.jsonl`,
+  `coach_NN.json` (the digest, Claude's proposal and the applied edits) and
+  `best_config.json`.
+- `<config>` is `default`, or the changes from the default config joined with
+  `+`: `no_grid`, `no_walls`, `path_hint`, `no_space`, `consequences`,
+  `pocket<ratio>`, and `instr-<hash>` for a rewritten `move_instruction`. For
+  example, `20260924-140352_seed7_path_hint+consequences.jsonl`.
+- A log's first line records the seed, player and full config. Logs made after
+  2026-09-24 03:20 also record the starvation cap. The last line records the
+  score, moves and death.
 
 ## Differences from the article
 
